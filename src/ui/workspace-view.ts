@@ -37,16 +37,23 @@ export class HaidencyrilWorkspaceView extends ItemView {
 
 		const header = root.createDiv({ cls: 'haidencyril-header' });
 		const heading = header.createDiv();
+		heading.createSpan({
+			text: '个人知识工作台',
+			cls: 'haidencyril-eyebrow',
+		});
 		heading.createEl('h1', { text: 'Haidencyril' });
 		heading.createEl('p', {
 			text: '从碎片出发，逐渐形成理解与行动。',
 			cls: 'haidencyril-muted',
 		});
 		const actions = header.createDiv({ cls: 'haidencyril-header-actions' });
-		const refreshButton = actions.createEl('button', { text: '刷新' });
+		const refreshButton = actions.createEl('button', {
+			text: '刷新',
+			cls: 'haidencyril-secondary-button',
+		});
 		refreshButton.addEventListener('click', () => void this.refresh());
 		const captureButton = actions.createEl('button', {
-			text: '记录碎片',
+			text: '＋ 记录碎片',
 			cls: 'mod-cta',
 		});
 		captureButton.addEventListener('click', () => this.plugin.openCaptureModal());
@@ -80,10 +87,11 @@ export class HaidencyrilWorkspaceView extends ItemView {
 	}
 
 	private async renderFragment(container: HTMLElement, file: TFile): Promise<void> {
+		const body = await this.plugin.repository.readBody(file);
 		const card = container.createDiv({ cls: 'haidencyril-fragment-card' });
 		const top = card.createDiv({ cls: 'haidencyril-fragment-top' });
 		const titleButton = top.createEl('button', {
-			text: file.basename,
+			text: body.slice(0, 260) || file.basename,
 			cls: 'haidencyril-link-button',
 		});
 		titleButton.addEventListener('click', () => void this.openFile(file));
@@ -93,12 +101,8 @@ export class HaidencyrilWorkspaceView extends ItemView {
 			cls: `haidencyril-status haidencyril-status-${status}`,
 		});
 
-		const body = await this.plugin.repository.readBody(file);
-		card.createEl('p', {
-			text: body.slice(0, 180) || '空白碎片',
-			cls: 'haidencyril-fragment-preview',
-		});
-		card.createEl('time', {
+		const footer = card.createDiv({ cls: 'haidencyril-card-footer' });
+		footer.createEl('time', {
 			text: new Intl.DateTimeFormat('zh-CN', {
 				month: 'short',
 				day: 'numeric',
@@ -107,11 +111,15 @@ export class HaidencyrilWorkspaceView extends ItemView {
 			}).format(new Date(file.stat.ctime)),
 		});
 
-		const actions = card.createDiv({ cls: 'haidencyril-card-actions' });
-		const openButton = actions.createEl('button', { text: '打开原文' });
+		const actions = footer.createDiv({ cls: 'haidencyril-card-actions' });
+		const openButton = actions.createEl('button', {
+			text: '打开原文',
+			cls: 'haidencyril-card-button',
+		});
 		openButton.addEventListener('click', () => void this.openFile(file));
 		const analyzeButton = actions.createEl('button', {
 			text: status === 'analyzed' ? '重新分析' : '共同分析',
+			cls: 'haidencyril-card-button haidencyril-card-button-primary',
 		});
 		analyzeButton.addEventListener('click', () => {
 			this.plugin.openReflectionModal(file);
