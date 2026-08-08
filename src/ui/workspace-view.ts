@@ -1,9 +1,27 @@
-import { ItemView, TFile, WorkspaceLeaf } from 'obsidian';
+import {
+	DropdownComponent,
+	ItemView,
+	SearchComponent,
+	TFile,
+	WorkspaceLeaf,
+} from 'obsidian';
 import type HaidencyrilPlugin from '../main';
 
 export const HAIDENCYRIL_VIEW_TYPE = 'haidencyril-workspace';
 
+type FragmentStatus = 'inbox' | 'analyzed';
+type FragmentStatusFilter = 'all' | FragmentStatus;
+
+interface FragmentEntry {
+	file: TFile;
+	body: string;
+	status: FragmentStatus;
+}
+
 export class HaidencyrilWorkspaceView extends ItemView {
+	private searchQuery = '';
+	private statusFilter: FragmentStatusFilter = 'all';
+
 	constructor(
 		leaf: WorkspaceLeaf,
 		private readonly plugin: HaidencyrilPlugin,
@@ -59,7 +77,16 @@ export class HaidencyrilWorkspaceView extends ItemView {
 		captureButton.addEventListener('click', () => this.plugin.openCaptureModal());
 
 		const files = this.plugin.repository.getInboxFiles();
-		const analyzedCount = files.filter((file) => this.statusOf(file) === 'analyzed').length;
+		const entries = await Promise.all(
+			files.map(async (file): Promise<FragmentEntry> => ({
+				file,
+				body: await this.plugin.repository.readBody(file),
+				status: this.statusOf(file),
+			})),
+		);
+		const analyzedCount = entries.filter(
+			(entry) => entry.status === 'analyzed',
+		).length;
 		const overview = root.createDiv({ cls: 'haidencyril-overview' });
 		this.addMetric(overview, '全部碎片', files.length.toString());
 		this.addMetric(overview, '待理解', (files.length - analyzedCount).toString());
@@ -67,7 +94,7 @@ export class HaidencyrilWorkspaceView extends ItemView {
 
 		const sectionHeader = root.createDiv({ cls: 'haidencyril-section-header' });
 		sectionHeader.createEl('h2', { text: '收件箱' });
-		sectionHeader.createSpan({ text: '不要求预先分类' });
+		const resultCount = sectionHeader.createSpan();
 
 		if (files.length === 0) {
 			const empty = root.createDiv({ cls: 'haidencyril-empty' });
@@ -80,14 +107,59 @@ export class HaidencyrilWorkspaceView extends ItemView {
 			return;
 		}
 
+		const controls = root.createDiv({ cls: 'haidencyril-search-controls' });
+		const searchHost = controls.createDiv({ cls: 'haidencyril-search-field' });
+		const search = new SearchComponent(searchHost)
+			.setPlaceholder('搜索碎片内容…')
+			.setValue(this.searchQuery);
+		const filterHost = controls.createDiv({ cls: 'haidencyril-status-filter' });
+		filterHost.createSpan({ text: '状态' });
+		const filter = new DropdownComponent(filterHost)
+			.addOption('all', '全部')
+			.addOption('inbox', '待理解')
+			.addOption('analyzed', '已有分析')
+			.setValue(this.statusFilter);
 		const list = root.createDiv({ cls: 'haidencyril-fragment-list' });
-		for (const file of files) {
-			await this.renderFragment(list, file);
-		}
+		const renderResults = (): void => {
+			const filteredEntries = this.filterEntries(entries);
+			resultCount.setText(`显示 ${filteredEntries.length} / ${entries.length} 条`);
+			list.empty();
+			if (filteredEntries.length === 0) {
+				const empty = list.createDiv({
+					cls: 'haidencyril-empty haidencyril-search-empty',
+				});
+				empty.createEl('h3', { text: '没有找到匹配的碎片' });
+				empty.createEl('p', { text: '可以换一个关键词，或清除状态筛选。' });
+				const resetButton = empty.createEl('button', {
+					text: '清除筛选',
+				});
+				resetButton.addEventListener('click', () => {
+					this.searchQuery = '';
+					this.statusFilter = 'all';
+					search.setValue('');
+					filter.setValue('all');
+					renderResults();
+				});
+				return;
+			}
+
+			for (const entry of filteredEntries) {
+				this.renderFragment(list, entry);
+			}
+		};
+		search.onChange((value) => {
+			this.searchQuery = value;
+			renderResults();
+		});
+		filter.onChange((value) => {
+			this.statusFilter = this.parseStatusFilter(value);
+			renderResults();
+		});
+		renderResults();
 	}
 
-	private async renderFragment(container: HTMLElement, file: TFile): Promise<void> {
-		const body = await this.plugin.repository.readBody(file);
+	private renderFragment(container: HTMLElement, entry: FragmentEntry): void {
+		const { body, file, status } = entry;
 		const card = container.createDiv({ cls: 'haidencyril-fragment-card' });
 		const top = card.createDiv({ cls: 'haidencyril-fragment-top' });
 		const titleButton = top.createEl('button', {
@@ -95,7 +167,6 @@ export class HaidencyrilWorkspaceView extends ItemView {
 			cls: 'haidencyril-link-button',
 		});
 		titleButton.addEventListener('click', () => void this.openFile(file));
-		const status = this.statusOf(file);
 		top.createSpan({
 			text: status === 'analyzed' ? '已有分析' : '待理解',
 			cls: `haidencyril-status haidencyril-status-${status}`,
@@ -133,13 +204,35 @@ export class HaidencyrilWorkspaceView extends ItemView {
 		});
 	}
 
+	private filterEntries(entries: FragmentEntry[]): FragmentEntry[] {
+		const terms = this.searchQuery
+			.trim()
+			.toLocaleLowerCase()
+			.split(/\s+/u)
+			.filter(Boolean);
+		return entries.filter((entry) => {
+			if (this.statusFilter !== 'all' && entry.status !== this.statusFilter) {
+				return false;
+			}
+			if (terms.length === 0) {
+				return true;
+			}
+			const searchableText = `${entry.file.basename}\n${entry.body}`.toLocaleLowerCase();
+			return terms.every((term) => searchableText.includes(term));
+		});
+	}
+
+	private parseStatusFilter(value: string): FragmentStatusFilter {
+		return value === 'inbox' || value === 'analyzed' ? value : 'all';
+	}
+
 	private addMetric(container: HTMLElement, label: string, value: string): void {
 		const metric = container.createDiv({ cls: 'haidencyril-metric' });
 		metric.createEl('strong', { text: value });
 		metric.createSpan({ text: label });
 	}
 
-	private statusOf(file: TFile): string {
+	private statusOf(file: TFile): FragmentStatus {
 		const frontmatter: unknown = this.app.metadataCache.getFileCache(
 			file,
 		)?.frontmatter;
@@ -150,8 +243,7 @@ export class HaidencyrilWorkspaceView extends ItemView {
 		) {
 			return 'inbox';
 		}
-		const status = frontmatter.haidencyril_status;
-		return typeof status === 'string' ? status : 'inbox';
+		return frontmatter.haidencyril_status === 'analyzed' ? 'analyzed' : 'inbox';
 	}
 
 	private async openFile(file: TFile): Promise<void> {
