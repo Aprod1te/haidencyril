@@ -10,6 +10,10 @@ import { CaptureModal, type CaptureSubmission } from './ui/capture-modal';
 import type { UserReflection } from './domain/analysis';
 import { ReflectionModal } from './ui/reflection-modal';
 import {
+	ManualConnectionModal,
+	ManualConnectionTargetModal,
+} from './ui/manual-connection-modal';
+import {
 	HAIDENCYRIL_VIEW_TYPE,
 	HaidencyrilWorkspaceView,
 } from './ui/workspace-view';
@@ -22,6 +26,7 @@ export default class HaidencyrilPlugin extends Plugin {
 	async onload(): Promise<void> {
 		await this.loadSettings();
 		this.repository = new FragmentRepository(this.app, () => this.settings);
+		await this.repository.removeLegacyPathMetadata();
 		this.analysisService = new OllamaAnalysisService();
 
 		this.registerView(
@@ -79,6 +84,28 @@ export default class HaidencyrilPlugin extends Plugin {
 		}
 		new ReflectionModal(this.app, (reflection) =>
 			this.analyzeFragment(file, reflection).then(() => undefined),
+		).open();
+	}
+
+	openManualConnectionModal(sourceFile: TFile): void {
+		new ManualConnectionTargetModal(
+			this.app,
+			sourceFile,
+			this.settings.analysisFolder,
+			(targetFile) => {
+				new ManualConnectionModal(this.app, targetFile, async (submission) => {
+					const created = await this.repository.addManualConnection(sourceFile, {
+						targetFile,
+						...submission,
+					});
+					new Notice(
+						created ? '手动关联已建立' : '这两条笔记已经存在链接',
+					);
+					if (created) {
+						await this.refreshWorkspace();
+					}
+				}).open();
+			},
 		).open();
 	}
 

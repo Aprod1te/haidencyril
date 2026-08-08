@@ -110,7 +110,6 @@ export function renderAnalysisMarkdown(
 
 	return `---
 haidencyril_type: analysis
-haidencyril_source: ${JSON.stringify(sourcePath)}
 haidencyril_created: ${JSON.stringify(createdAt)}
 haidencyril_model: ${JSON.stringify(model)}
 ---

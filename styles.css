@@ -245,6 +245,20 @@
 	max-width: 720px;
 }
 
+.haidencyril-connection-modal {
+	max-width: 640px;
+}
+
+.haidencyril-connection-target {
+	margin: 8px 0 18px;
+	padding: 10px 12px;
+	border-radius: 9px;
+	background: var(--background-secondary);
+	color: var(--text-muted);
+	font-size: var(--font-ui-smaller);
+	overflow-wrap: anywhere;
+}
+
 .haidencyril-capture-input {
 	display: block;
 	width: 100%;

@@ -117,6 +117,13 @@ export class HaidencyrilWorkspaceView extends ItemView {
 			cls: 'haidencyril-card-button',
 		});
 		openButton.addEventListener('click', () => void this.openFile(file));
+		const connectButton = actions.createEl('button', {
+			text: '手动关联',
+			cls: 'haidencyril-card-button',
+		});
+		connectButton.addEventListener('click', () => {
+			this.plugin.openManualConnectionModal(file);
+		});
 		const analyzeButton = actions.createEl('button', {
 			text: status === 'analyzed' ? '重新分析' : '共同分析',
 			cls: 'haidencyril-card-button haidencyril-card-button-primary',

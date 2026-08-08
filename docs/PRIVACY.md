@@ -3,7 +3,7 @@
 ## 本地保存的数据
 
 - 原始碎片和分析账本保存在用户选择的 Obsidian Vault。
-- 插件设置通过 Obsidian `loadData` / `saveData` 保存。
+- 插件设置通过 Obsidian `loadData` / `saveData` 保存；笔记之间的关系使用 Markdown 双向链接，不在属性中重复保存文件路径。
 - 插件没有遥测、分析统计、广告或自动上传功能。
 
 ## 何时会访问网络

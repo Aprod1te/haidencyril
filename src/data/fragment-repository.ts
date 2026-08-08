@@ -10,6 +10,12 @@ export interface ConnectionCandidate {
 	score: number;
 }
 
+export interface ManualConnection {
+	targetFile: TFile;
+	relation: string;
+	reason: string;
+}
+
 export class FragmentRepository {
 	constructor(
 		private readonly app: App,
@@ -24,16 +30,10 @@ export class FragmentRepository {
 
 		const settings = this.getSettings();
 		await this.ensureFolder(settings.inboxFolder);
-		const createdAt = new Date().toISOString();
-		const id = `fragment-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 		const title = this.makeTitle(normalizedContent);
 		const path = await this.availablePath(settings.inboxFolder, title);
 		const markdown = `---
-haidencyril_id: ${id}
-haidencyril_type: fragment
 haidencyril_status: inbox
-haidencyril_created: ${JSON.stringify(createdAt)}
-haidencyril_source: manual
 ---
 
 # ${title}
@@ -55,10 +55,10 @@ ${normalizedContent}
 
 	async readBody(file: TFile): Promise<string> {
 		const content = await this.app.vault.cachedRead(file);
-		return content
+		const body = content
 			.replace(/^---\s*\n[\s\S]*?\n---\s*\n?/u, '')
-			.replace(/^#\s+.*\n+/u, '')
-			.trim();
+			.replace(/^#\s+.*\n+/u, '');
+		return (body.split(/^## 手动关联\s*$/mu, 1)[0] ?? '').trim();
 	}
 
 	async findConnectionCandidates(
@@ -128,16 +128,76 @@ ${normalizedContent}
 			sourceFile,
 			(frontmatter: Record<string, unknown>) => {
 				frontmatter['haidencyril_status'] = 'analyzed';
-				frontmatter['haidencyril_analysis'] = analysisFile.path;
-				const history = this.stringArray(
-					frontmatter['haidencyril_analyses'],
-				);
-				history.push(analysisFile.path);
-				frontmatter['haidencyril_analyses'] = history;
+				this.removeLegacyFragmentMetadata(frontmatter);
 			},
 		);
 
 		return analysisFile;
+	}
+
+	async addManualConnection(
+		sourceFile: TFile,
+		connection: ManualConnection,
+	): Promise<boolean> {
+		const existingLinks = this.app.metadataCache.getFileCache(sourceFile)?.links ?? [];
+		const alreadyLinked = existingLinks.some((link) => {
+			const destination = this.app.metadataCache.getFirstLinkpathDest(
+				link.link,
+				sourceFile.path,
+			);
+			return destination?.path === connection.targetFile.path;
+		});
+		if (alreadyLinked) {
+			return false;
+		}
+
+		const relation = this.singleLine(connection.relation);
+		const reason = this.singleLine(connection.reason);
+		const link = this.app.fileManager.generateMarkdownLink(
+			connection.targetFile,
+			sourceFile.path,
+		);
+		const entry = `- ${link} · ${relation}\n  - ${reason}`;
+		await this.app.vault.process(sourceFile, (content) =>
+			this.insertUnderHeading(content, '手动关联', entry),
+		);
+		return true;
+	}
+
+	async removeLegacyPathMetadata(): Promise<void> {
+		const settings = this.getSettings();
+		const inboxPrefix = `${normalizePath(settings.inboxFolder)}/`;
+		const analysisPrefix = `${normalizePath(settings.analysisFolder)}/`;
+		for (const file of this.app.vault.getMarkdownFiles()) {
+			const frontmatter = this.app.metadataCache.getFileCache(file)?.frontmatter;
+			if (
+				file.path.startsWith(inboxPrefix) &&
+				frontmatter &&
+				this.hasLegacyFragmentMetadata(frontmatter)
+			) {
+				await this.app.fileManager.processFrontMatter(
+					file,
+					(frontmatter: Record<string, unknown>) => {
+						this.removeLegacyFragmentMetadata(frontmatter);
+					},
+				);
+			}
+			if (
+				file.path.startsWith(analysisPrefix) &&
+				frontmatter &&
+				Object.prototype.hasOwnProperty.call(
+					frontmatter,
+					'haidencyril_source',
+				)
+			) {
+				await this.app.fileManager.processFrontMatter(
+					file,
+					(frontmatter: Record<string, unknown>) => {
+						delete frontmatter['haidencyril_source'];
+					},
+				);
+			}
+		}
 	}
 
 	private async ensureFolder(folderPath: string): Promise<void> {
@@ -197,12 +257,55 @@ ${normalizedContent}
 		return terms;
 	}
 
-	private stringArray(value: unknown): string[] {
-		if (!Array.isArray(value)) {
-			return [];
+	private removeLegacyFragmentMetadata(
+		frontmatter: Record<string, unknown>,
+	): void {
+		delete frontmatter['haidencyril_id'];
+		delete frontmatter['haidencyril_type'];
+		delete frontmatter['haidencyril_created'];
+		delete frontmatter['haidencyril_source'];
+		delete frontmatter['haidencyril_analysis'];
+		delete frontmatter['haidencyril_analyses'];
+	}
+
+	private hasLegacyFragmentMetadata(
+		frontmatter: Record<string, unknown>,
+	): boolean {
+		return [
+			'haidencyril_id',
+			'haidencyril_type',
+			'haidencyril_created',
+			'haidencyril_source',
+			'haidencyril_analysis',
+			'haidencyril_analyses',
+		].some((key) => Object.prototype.hasOwnProperty.call(frontmatter, key));
+	}
+
+	private singleLine(value: string): string {
+		return value.trim().replace(/\s+/gu, ' ');
+	}
+
+	private insertUnderHeading(
+		content: string,
+		heading: string,
+		entry: string,
+	): string {
+		const headingLine = `## ${heading}`;
+		const headingIndex = content.indexOf(headingLine);
+		if (headingIndex < 0) {
+			return `${content.trimEnd()}\n\n${headingLine}\n\n${entry}\n`;
 		}
-		return value.filter(
-			(item: unknown): item is string => typeof item === 'string',
-		);
+
+		const sectionStart = headingIndex + headingLine.length;
+		const followingContent = content.slice(sectionStart);
+		const nextHeadingMatch = /\n##\s+/u.exec(followingContent);
+		const insertionIndex = nextHeadingMatch
+			? sectionStart + nextHeadingMatch.index
+			: content.length;
+		const before = content.slice(0, insertionIndex).trimEnd();
+		const after = content.slice(insertionIndex).trimStart();
+		return after.length > 0
+			? `${before}\n${entry}\n\n${after}`
+			: `${before}\n${entry}\n`;
 	}
 }
