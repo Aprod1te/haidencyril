@@ -39,16 +39,16 @@ Haidencyril 是一个面向个人使用的 Obsidian 插件：把随手留下的�
 
 开发时不要直接使用主知识库。按照 Obsidian 官方建议，先准备一个独立测试 Vault。
 
-## 使用 AI 分析
+## 使用本地 AI 分析
 
-AI 默认关闭。要启用：
+AI 分析完全在 Mac 本地运行，不需要 API Key 或付费账号：
 
-1. 进入 **设置 → Haidencyril**。
-2. 开启 **启用 OpenAI 分析**。
-3. 使用 Obsidian Secret Storage 新建或选择 OpenAI API Key。
+1. 安装并启动 [Ollama](https://ollama.com/download)。
+2. 在终端运行 `ollama pull qwen3.5:9b` 下载模型。
+3. 进入 **设置 → Haidencyril**，确认已开启 **启用本地 AI 分析**。
 4. 点击碎片上的 **共同分析**。
 
-只有主动分析时，当前碎片和最多 4 条本地候选笔记摘录会被发送给 OpenAI。请求使用 `store: false`。插件不包含遥测、广告或后台上传。
+只有主动分析时，当前碎片和最多 4 条本地候选笔记摘录才会交给本机 Ollama。插件不包含遥测、广告或后台上传。iPhone 和 iPad 可以继续记录、同步和浏览笔记；当前版本只在运行 Ollama 的 Mac 上生成 AI 分析。
 
 ## 常用命令
 

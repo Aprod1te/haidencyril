@@ -2,7 +2,6 @@ import {
 	App,
 	Notice,
 	PluginSettingTab,
-	SecretComponent,
 	Setting,
 } from 'obsidian';
 import type HaidencyrilPlugin from './main';
@@ -12,7 +11,6 @@ export interface HaidencyrilSettings {
 	analysisFolder: string;
 	projectsFolder: string;
 	aiEnabled: boolean;
-	apiKeySecretName: string;
 	model: string;
 	openAnalysisAfterGeneration: boolean;
 }
@@ -21,9 +19,8 @@ export const DEFAULT_SETTINGS: HaidencyrilSettings = {
 	inboxFolder: 'Haidencyril/Inbox',
 	analysisFolder: 'Haidencyril/Analysis',
 	projectsFolder: 'Haidencyril/Projects',
-	aiEnabled: false,
-	apiKeySecretName: '',
-	model: 'gpt-5.6-terra',
+	aiEnabled: true,
+	model: 'qwen3.5:9b',
 	openAnalysisAfterGeneration: true,
 };
 
@@ -40,7 +37,7 @@ export class HaidencyrilSettingTab extends PluginSettingTab {
 		containerEl.empty();
 		new Setting(containerEl).setName('基础设置').setHeading();
 		containerEl.createEl('p', {
-			text: '原始笔记始终保存在你的 vault。只有你主动分析时，选中的碎片和最多 4 条候选笔记摘录才会发送给 OpenAI。',
+			text: '分析在这台电脑本地完成。原始笔记和候选摘录不会发送到云端。',
 			cls: 'setting-item-description',
 		});
 
@@ -55,8 +52,8 @@ export class HaidencyrilSettingTab extends PluginSettingTab {
 
 		new Setting(containerEl).setName('AI 分析').setHeading();
 		new Setting(containerEl)
-			.setName('启用 OpenAI 分析')
-			.setDesc('关闭时，捕捉和本地浏览仍可正常使用。')
+			.setName('启用本地 AI 分析')
+			.setDesc('需要在这台电脑上运行本地模型服务；关闭后仍可记录和浏览碎片。')
 			.addToggle((toggle) =>
 				toggle
 					.setValue(this.plugin.settings.aiEnabled)
@@ -67,20 +64,8 @@ export class HaidencyrilSettingTab extends PluginSettingTab {
 			);
 
 		new Setting(containerEl)
-			.setName('OpenAI API key')
-			.setDesc('使用 Obsidian secret storage 加密保存；插件设置只记录密钥名称。')
-			.addComponent((element) =>
-				new SecretComponent(this.app, element)
-					.setValue(this.plugin.settings.apiKeySecretName)
-					.onChange(async (value) => {
-						this.plugin.settings.apiKeySecretName = value;
-						await this.plugin.saveSettings();
-					}),
-			);
-
-		new Setting(containerEl)
-			.setName('模型')
-			.setDesc('使用支持 responses API 与结构化输出的模型。')
+			.setName('本地模型')
+			.setDesc('Ollama 模型名称。当前设备推荐 qwen3.5:9b。')
 			.addText((text) =>
 				text
 					.setPlaceholder(DEFAULT_SETTINGS.model)

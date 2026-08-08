@@ -5,7 +5,7 @@ import {
 	HaidencyrilSettingTab,
 	type HaidencyrilSettings,
 } from './settings';
-import { OpenAIAnalysisService } from './services/openai-analysis-service';
+import { OllamaAnalysisService } from './services/ollama-analysis-service';
 import { CaptureModal, type CaptureSubmission } from './ui/capture-modal';
 import type { UserReflection } from './domain/analysis';
 import { ReflectionModal } from './ui/reflection-modal';
@@ -17,12 +17,12 @@ import {
 export default class HaidencyrilPlugin extends Plugin {
 	settings!: HaidencyrilSettings;
 	repository!: FragmentRepository;
-	private analysisService!: OpenAIAnalysisService;
+	private analysisService!: OllamaAnalysisService;
 
 	async onload(): Promise<void> {
 		await this.loadSettings();
 		this.repository = new FragmentRepository(this.app, () => this.settings);
-		this.analysisService = new OpenAIAnalysisService();
+		this.analysisService = new OllamaAnalysisService();
 
 		this.registerView(
 			HAIDENCYRIL_VIEW_TYPE,
@@ -67,14 +67,14 @@ export default class HaidencyrilPlugin extends Plugin {
 	openCaptureModal(): void {
 		new CaptureModal(
 			this.app,
-			this.settings.aiEnabled && this.settings.apiKeySecretName.length > 0,
+			this.settings.aiEnabled,
 			(submission) => this.handleCapture(submission),
 		).open();
 	}
 
 	openReflectionModal(file: TFile): void {
-		if (!this.settings.aiEnabled || this.settings.apiKeySecretName.length === 0) {
-			new Notice('请先在插件设置中启用 AI 并选择 API key');
+		if (!this.settings.aiEnabled) {
+			new Notice('请先在插件设置中启用本地 AI');
 			return;
 		}
 		new ReflectionModal(this.app, (reflection) =>
@@ -84,11 +84,7 @@ export default class HaidencyrilPlugin extends Plugin {
 
 	async analyzeFragment(file: TFile, reflection: UserReflection): Promise<TFile> {
 		if (!this.settings.aiEnabled) {
-			throw new Error('请先在 Haidencyril 设置中启用 OpenAI 分析');
-		}
-		const apiKey = this.app.secretStorage.getSecret(this.settings.apiKeySecretName);
-		if (!apiKey) {
-			throw new Error('请先在 Haidencyril 设置中选择有效的 OpenAI API Key');
+			throw new Error('请先在 Haidencyril 设置中启用本地 AI 分析');
 		}
 
 		new Notice('正在形成可核对的分析账本…');
@@ -99,7 +95,6 @@ export default class HaidencyrilPlugin extends Plugin {
 			content,
 			reflection,
 			candidates,
-			apiKey,
 			this.settings.model,
 		);
 		const analysisFile = await this.repository.createAnalysis(
@@ -121,11 +116,20 @@ export default class HaidencyrilPlugin extends Plugin {
 	}
 
 	private async loadSettings(): Promise<void> {
+		const saved = (await this.loadData()) as (Partial<HaidencyrilSettings> & {
+			apiKeySecretName?: string;
+		}) | null;
 		this.settings = Object.assign(
 			{},
 			DEFAULT_SETTINGS,
-			(await this.loadData()) as Partial<HaidencyrilSettings>,
+			saved,
 		);
+		if (this.settings.model.startsWith('gpt-')) {
+			this.settings.model = DEFAULT_SETTINGS.model;
+		}
+		delete (this.settings as HaidencyrilSettings & { apiKeySecretName?: string })
+			.apiKeySecretName;
+		await this.saveData(this.settings);
 	}
 
 	private async handleCapture(submission: CaptureSubmission): Promise<void> {

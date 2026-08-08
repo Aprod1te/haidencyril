@@ -57,12 +57,12 @@ export class CaptureModal extends Modal {
 					void this.submit(true, button);
 				});
 			if (!this.aiAvailable) {
-				button.setTooltip('请先在设置中启用 AI 并选择 API key');
+				button.setTooltip('请先在设置中启用本地 AI');
 			}
 		});
 
 		contentEl.createEl('p', {
-			text: '“保存并分析”会把本碎片和最多 4 条本地候选笔记摘录发送给 OpenAI。',
+			text: '“保存并分析”只会把本碎片和最多 4 条候选笔记交给这台电脑上的本地模型。',
 			cls: 'haidencyril-privacy-note',
 		});
 	}
