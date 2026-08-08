@@ -111,7 +111,7 @@ export default class HaidencyrilPlugin extends Plugin {
 		new Notice('分析账本已生成');
 		await this.refreshWorkspace();
 		if (this.settings.openAnalysisAfterGeneration) {
-			await this.app.workspace.getLeaf(false).openFile(analysisFile);
+			await this.app.workspace.getLeaf(true).openFile(analysisFile);
 		}
 		return analysisFile;
 	}

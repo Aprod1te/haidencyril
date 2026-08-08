@@ -140,6 +140,6 @@ export class HaidencyrilWorkspaceView extends ItemView {
 	}
 
 	private async openFile(file: TFile): Promise<void> {
-		await this.app.workspace.getLeaf(false).openFile(file);
+		await this.app.workspace.getLeaf(true).openFile(file);
 	}
 }
