@@ -35,6 +35,8 @@ import { ProjectReviewModal } from './ui/project-review-modal';
 import { SemanticSearchModal } from './ui/semantic-search-modal';
 import { CourseImportModal } from './ui/course-import-modal';
 import { ScheduleModal } from './ui/schedule-modal';
+import { AgendaModal, type AgendaSuggestion } from './ui/agenda-modal';
+import type { CalendarBlock } from './domain/schedule';
 import {
 	HAIDENCYRIL_VIEW_TYPE,
 	HaidencyrilWorkspaceView,
@@ -87,8 +89,13 @@ export default class HaidencyrilPlugin extends Plugin {
 		});
 		this.addCommand({
 			id: 'import-course-calendar',
-			name: '导入课表或固定日程',
+			name: '导入 .ics 固定日程',
 			callback: () => this.openCourseImportModal(),
+		});
+		this.addCommand({
+			id: 'open-agenda-suggestions',
+			name: '查看日程建议',
+			callback: () => void this.openAgendaModal(),
 		});
 		this.addCommand({
 			id: 'copy-shortcut-capture-url',
@@ -119,6 +126,10 @@ export default class HaidencyrilPlugin extends Plugin {
 		this.registerObsidianProtocolHandler(
 			'haidencyril-capture',
 			(params) => void this.handleProtocolCapture(params),
+		);
+		this.registerObsidianProtocolHandler(
+			'haidencyril-calendar-sync',
+			(params) => void this.handleCalendarSync(params),
 		);
 		this.addSettingTab(new HaidencyrilSettingTab(this.app, this));
 
@@ -244,6 +255,44 @@ export default class HaidencyrilPlugin extends Plugin {
 			await this.app.workspace.getLeaf(true).openFile(file);
 			return blocks.length;
 		}).open();
+	}
+
+	async openAgendaModal(): Promise<void> {
+		const [blocks, projects] = await Promise.all([
+			this.scheduleRepository.getAgendaBlocks(),
+			this.repository.getProjects(),
+		]);
+		const deadline = new Date();
+		deadline.setDate(deadline.getDate() + 7);
+		deadline.setHours(22, 0, 0, 0);
+		const suggestions: AgendaSuggestion[] = projects
+			.filter((project) => project.status === 'active')
+			.map((project) => ({
+				projectFile: project.file,
+				projectTitle: project.file.basename,
+				task: project.nextAction,
+				proposal: findScheduleProposal(
+					{
+						title: project.nextAction,
+						durationMinutes: 60,
+						deadline,
+						priority: 'normal',
+					},
+					blocks,
+				),
+			}));
+		new AgendaModal(
+			this.app,
+			blocks,
+			suggestions,
+			() => this.runCalendarSyncShortcut(),
+			() => this.openCourseImportModal(),
+			(projectFile, task) => this.openScheduleModal(projectFile, task),
+		).open();
+	}
+
+	async getAgendaBlocks(): Promise<CalendarBlock[]> {
+		return this.scheduleRepository.getAgendaBlocks();
 	}
 
 	openScheduleModal(projectFile: TFile, nextAction: string): void {
@@ -391,6 +440,97 @@ export default class HaidencyrilPlugin extends Plugin {
 		} catch (error) {
 			new Notice(error instanceof Error ? error.message : '快捷捕捉失败');
 		}
+	}
+
+	private async handleCalendarSync(
+		params: Record<string, string>,
+	): Promise<void> {
+		try {
+			const now = new Date();
+			const horizon = new Date(now);
+			horizon.setDate(horizon.getDate() + 8);
+			const blocks = this.parseCalendarPayload(params['events'] ?? '')
+				.filter((block) => new Date(block.end) >= now)
+				.filter((block) => new Date(block.start) <= horizon);
+			await this.scheduleRepository.saveCalendarSnapshot(
+				blocks,
+				'苹果快捷指令',
+			);
+			await this.refreshWorkspace();
+			new Notice(`已同步 ${blocks.length} 项苹果日历安排`);
+		} catch (error) {
+			new Notice(error instanceof Error ? error.message : '同步苹果日历失败');
+		}
+	}
+
+	private runCalendarSyncShortcut(): void {
+		const shortcutName = this.settings.calendarSyncShortcutName.trim();
+		if (!shortcutName) {
+			new Notice('请先在设置中填写日历同步快捷指令名称');
+			return;
+		}
+		window.open(
+			`shortcuts://run-shortcut?name=${encodeURIComponent(shortcutName)}`,
+		);
+		new Notice('正在通过快捷指令读取未来八天日程');
+	}
+
+	private parseCalendarPayload(payload: string): CalendarBlock[] {
+		const value = payload.trim();
+		if (!value) {
+			return [];
+		}
+		let parsed: unknown;
+		if (value.includes('HCRECORD')) {
+			parsed = value
+				.split('HCRECORD')
+				.map((record) => record.trim())
+				.filter(Boolean)
+				.map((record) => {
+					const [title, end, start] = record
+						.split('HCSEP')
+						.map((field) => field.trim());
+					return { title, start, end, location: '' };
+				});
+		} else {
+			try {
+				parsed = JSON.parse(value);
+			} catch {
+			parsed = value.split('\n').filter(Boolean).map((line) => {
+				const [title, start, end, location = ''] = line.split('\t');
+				return { title, start, end, location };
+			});
+			}
+		}
+		if (!Array.isArray(parsed)) {
+			throw new Error('快捷指令返回的日程格式不正确');
+		}
+		return parsed.map((entry, index) => {
+			if (typeof entry !== 'object' || entry === null) {
+				throw new Error(`第 ${index + 1} 项日程格式不正确`);
+			}
+			const candidate = entry as Record<string, unknown>;
+			const title = typeof candidate['title'] === 'string' ? candidate['title'].trim() : '';
+			const start = typeof candidate['start'] === 'string' ? candidate['start'] : '';
+			const end = typeof candidate['end'] === 'string' ? candidate['end'] : '';
+			if (
+				!title ||
+				Number.isNaN(new Date(start).getTime()) ||
+				Number.isNaN(new Date(end).getTime())
+			) {
+				throw new Error(`第 ${index + 1} 项日程缺少有效的标题或时间`);
+			}
+			return {
+				title,
+				start: new Date(start).toISOString(),
+				end: new Date(end).toISOString(),
+				location:
+					typeof candidate['location'] === 'string'
+						? candidate['location'].trim()
+						: '',
+				kind: 'fixed',
+			};
+		});
 	}
 
 	private async copyShortcutCaptureUrl(): Promise<void> {

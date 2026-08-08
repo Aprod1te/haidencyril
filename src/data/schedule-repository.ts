@@ -47,7 +47,57 @@ ${rows.join('\n')}
 	}
 
 	async getBusyBlocks(): Promise<CalendarBlock[]> {
-		return [...(await this.getLatestCourses()), ...(await this.getScheduledWork())];
+		return this.deduplicate([
+			...(await this.getLatestCourses()),
+			...(await this.getLatestCalendarSnapshot()),
+			...(await this.getScheduledWork()),
+		]);
+	}
+
+	async getAgendaBlocks(): Promise<CalendarBlock[]> {
+		const now = new Date();
+		const end = new Date(now);
+		end.setDate(end.getDate() + 8);
+		return (await this.getBusyBlocks())
+			.filter((block) => new Date(block.end) >= now)
+			.filter((block) => new Date(block.start) <= end)
+			.sort(
+				(left, right) =>
+					new Date(left.start).getTime() - new Date(right.start).getTime(),
+			);
+	}
+
+	async saveCalendarSnapshot(
+		blocks: CalendarBlock[],
+		sourceName: string,
+	): Promise<TFile> {
+		const folder = normalizePath(`${this.getSettings().scheduleFolder}/Calendar`);
+		await this.ensureFolder(folder);
+		const timestamp = new Date().toISOString().replace(/[:.]/gu, '-');
+		const path = normalizePath(`${folder}/苹果日历同步 - ${timestamp}.md`);
+		const rows = blocks.map((block) => {
+			const location = block.location ? ` @ ${block.location}` : '';
+			return `- ${this.formatRange(block)} · ${block.title}${location}\n  ${EVENT_MARKER}${JSON.stringify(block)} -->`;
+		});
+		return this.app.vault.create(
+			path,
+			`---
+haidencyril_type: calendar_snapshot
+haidencyril_created: ${JSON.stringify(new Date().toISOString())}
+---
+
+# 苹果日历同步
+
+来源：${sourceName}
+
+> [!info] 同步边界
+> 这是苹果日历未来八天的只读快照。插件不会静默修改已有日历事件。
+
+## 日程
+
+${rows.length > 0 ? rows.join('\n') : '- 未来八天没有日程。'}
+`,
+		);
 	}
 
 	async createScheduleDraft(
@@ -110,16 +160,32 @@ ${conflicts}
 	}
 
 	private async getLatestCourses(): Promise<CalendarBlock[]> {
-		const folder = normalizePath(`${this.getSettings().scheduleFolder}/Courses`);
-		const prefix = `${folder}/`;
-		const latest = this.app.vault
-			.getMarkdownFiles()
-			.filter((file) => file.path.startsWith(prefix))
-			.sort((left, right) => right.stat.mtime - left.stat.mtime)[0];
+		const latest = this.latestFile('Courses');
 		if (!latest) {
 			return [];
 		}
 		return this.parseEventMarkers(await this.app.vault.cachedRead(latest));
+	}
+
+	private async getLatestCalendarSnapshot(): Promise<CalendarBlock[]> {
+		const latest = this.latestFile('Calendar');
+		if (!latest) {
+			return [];
+		}
+		return this.parseEventMarkers(await this.app.vault.cachedRead(latest));
+	}
+
+	private latestFile(subfolder: string): TFile | null {
+		const folder = normalizePath(
+			`${this.getSettings().scheduleFolder}/${subfolder}`,
+		);
+		const prefix = `${folder}/`;
+		return (
+			this.app.vault
+				.getMarkdownFiles()
+				.filter((file) => file.path.startsWith(prefix))
+				.sort((left, right) => right.stat.mtime - left.stat.mtime)[0] ?? null
+		);
 	}
 
 	private async getScheduledWork(): Promise<CalendarBlock[]> {
@@ -176,6 +242,15 @@ ${conflicts}
 			}
 		}
 		return blocks;
+	}
+
+	private deduplicate(blocks: CalendarBlock[]): CalendarBlock[] {
+		const unique = new Map<string, CalendarBlock>();
+		for (const block of blocks) {
+			const key = `${block.title.trim()}\u0000${block.start}\u0000${block.end}`;
+			unique.set(key, block);
+		}
+		return [...unique.values()];
 	}
 
 	private formatRange(block: CalendarBlock): string {

@@ -10,6 +10,7 @@ import type {
 	ProjectSummary,
 	ReviewableConnection,
 } from '../data/fragment-repository';
+import type { CalendarBlock } from '../domain/schedule';
 
 export const HAIDENCYRIL_VIEW_TYPE = 'haidencyril-workspace';
 
@@ -91,12 +92,12 @@ export class HaidencyrilWorkspaceView extends ItemView {
 		semanticButton.addEventListener('click', () =>
 			this.plugin.openSemanticSearchModal(),
 		);
-		const coursesButton = actions.createEl('button', {
-			text: '导入课表',
+		const agendaButton = actions.createEl('button', {
+			text: '日程建议',
 			cls: 'haidencyril-secondary-button',
 		});
-		coursesButton.addEventListener('click', () =>
-			this.plugin.openCourseImportModal(),
+		agendaButton.addEventListener('click', () =>
+			void this.plugin.openAgendaModal(),
 		);
 		const captureButton = actions.createEl('button', {
 			text: '＋ 记录碎片',
@@ -105,9 +106,10 @@ export class HaidencyrilWorkspaceView extends ItemView {
 		captureButton.addEventListener('click', () => this.plugin.openCaptureModal());
 
 		const files = this.plugin.repository.getInboxFiles();
-		const [analysisHistory, projects] = await Promise.all([
+		const [analysisHistory, projects, agendaBlocks] = await Promise.all([
 			this.plugin.repository.getAnalysisHistory(),
 			this.plugin.repository.getProjects(),
+			this.plugin.getAgendaBlocks(),
 		]);
 		const entries = await Promise.all(
 			files.map(async (file): Promise<FragmentEntry> => {
@@ -159,6 +161,7 @@ export class HaidencyrilWorkspaceView extends ItemView {
 			'推进中 / 已完成',
 			`${activeProjects.length} / ${completedProjects.length}`,
 		);
+		this.renderToday(root, agendaBlocks);
 
 		if (activeProjects.length > 0) {
 			this.renderProjects(root, activeProjects);
@@ -231,6 +234,46 @@ export class HaidencyrilWorkspaceView extends ItemView {
 			renderResults();
 		});
 		renderResults();
+	}
+
+	private renderToday(container: HTMLElement, blocks: CalendarBlock[]): void {
+		const today = new Date();
+		const todayBlocks = blocks.filter(
+			(block) => new Date(block.start).toDateString() === today.toDateString(),
+		);
+		const header = container.createDiv({
+			cls: 'haidencyril-section-header haidencyril-today-header',
+		});
+		header.createEl('h2', { text: '今天' });
+		const open = header.createEl('button', {
+			text: '查看日程建议',
+			cls: 'haidencyril-link-button',
+		});
+		open.addEventListener('click', () => void this.plugin.openAgendaModal());
+		const list = container.createDiv({ cls: 'haidencyril-today-list' });
+		if (todayBlocks.length === 0) {
+			list.createEl('p', {
+				text: '今天没有已同步的安排。你可以保留空白，也可以从项目下一步生成建议。',
+				cls: 'haidencyril-today-empty',
+			});
+			return;
+		}
+		const formatter = new Intl.DateTimeFormat('zh-CN', {
+			hour: '2-digit',
+			minute: '2-digit',
+			hour12: false,
+		});
+		for (const block of todayBlocks) {
+			const item = list.createDiv({ cls: 'haidencyril-today-item' });
+			item.createEl('time', {
+				text: `${formatter.format(new Date(block.start))}–${formatter.format(new Date(block.end))}`,
+			});
+			const content = item.createDiv();
+			content.createEl('strong', { text: block.title });
+			if (block.location) {
+				content.createSpan({ text: block.location });
+			}
+		}
 	}
 
 	private renderFragment(container: HTMLElement, entry: FragmentEntry): void {

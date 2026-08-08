@@ -15,6 +15,7 @@ export interface HaidencyrilSettings {
 	model: string;
 	embeddingModel: string;
 	calendarShortcutName: string;
+	calendarSyncShortcutName: string;
 	openAnalysisAfterGeneration: boolean;
 }
 
@@ -27,6 +28,7 @@ export const DEFAULT_SETTINGS: HaidencyrilSettings = {
 	model: 'qwen3.5:9b',
 	embeddingModel: 'qwen3-embedding:0.6b',
 	calendarShortcutName: 'Haidencyril 日程',
+	calendarSyncShortcutName: 'Haidencyril 同步日程',
 	openAnalysisAfterGeneration: true,
 };
 
@@ -55,7 +57,7 @@ export class HaidencyrilSettingTab extends PluginSettingTab {
 			'analysisFolder',
 		);
 		this.addFolderSetting('项目', '由碎片逐渐形成的项目。', 'projectsFolder');
-		this.addFolderSetting('日程', '导入课表、日程草案和确认记录。', 'scheduleFolder');
+		this.addFolderSetting('日程', '日历快照、课表和已确认的行动。', 'scheduleFolder');
 
 		new Setting(containerEl).setName('AI 分析').setHeading();
 		new Setting(containerEl)
@@ -107,6 +109,19 @@ export class HaidencyrilSettingTab extends PluginSettingTab {
 					.setValue(this.plugin.settings.calendarShortcutName)
 					.onChange(async (value) => {
 						this.plugin.settings.calendarShortcutName = value.trim();
+						await this.plugin.saveSettings();
+					}),
+			);
+
+		new Setting(containerEl)
+			.setName('日历同步快捷指令名称')
+			.setDesc('工作台读取未来日程时调用的苹果快捷指令。')
+			.addText((text) =>
+				text
+					.setPlaceholder(DEFAULT_SETTINGS.calendarSyncShortcutName)
+					.setValue(this.plugin.settings.calendarSyncShortcutName)
+					.onChange(async (value) => {
+						this.plugin.settings.calendarSyncShortcutName = value.trim();
 						await this.plugin.saveSettings();
 					}),
 			);

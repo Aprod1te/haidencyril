@@ -18,7 +18,7 @@ export class CourseImportModal extends Modal {
 
 	onOpen(): void {
 		this.contentEl.addClass('haidencyril-course-import-modal');
-		this.contentEl.createEl('h2', { text: '导入课表或固定日程' });
+		this.contentEl.createEl('h2', { text: '导入 .ics 固定日程' });
 		this.contentEl.createEl('p', {
 			text: '从教务系统或苹果日历导出 .ics 文件。插件不登录教务系统，也不保存账号密码。',
 			cls: 'haidencyril-muted',
@@ -40,7 +40,7 @@ export class CourseImportModal extends Modal {
 		});
 		const choose = new Setting(this.contentEl)
 			.setName('日历文件')
-			.setDesc('支持标准日历文件和重复课程。');
+			.setDesc('支持标准日历文件和重复日程。');
 		choose.addButton((button) =>
 			button.setButtonText('选择 .ics 文件').onClick(() => picker.click()),
 		);
@@ -82,7 +82,7 @@ export class CourseImportModal extends Modal {
 			new Notice(`已导入 ${count} 条固定安排`);
 			this.close();
 		} catch (error) {
-			new Notice(error instanceof Error ? error.message : '导入课表失败');
+			new Notice(error instanceof Error ? error.message : '导入 .ics 失败');
 			this.submitting = false;
 			button.setDisabled(false);
 		}

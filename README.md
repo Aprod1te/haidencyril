@@ -18,7 +18,7 @@ Haidencyril 是一个面向个人使用的 Obsidian 插件：把随手留下的�
 12. 完成项目时记录实际结果、依据和经验，并在工作台保留成果。
 13. 使用本地可重建语义索引，按含义找回笔记。
 14. 通过苹果快捷指令从听写、截图 OCR、照片 OCR 和分享菜单捕捉内容。
-15. 导入标准 `.ics` 课表，避开课程安排项目行动，并在最终确认后交给苹果日历快捷指令。
+15. 在工作台汇总苹果日历、课表与已确认行动，为项目下一步寻找空闲时间，并在最终确认后交给苹果日历快捷指令。
 
 ## 设计原则
 
@@ -70,11 +70,12 @@ ollama pull qwen3-embedding:0.6b
 - **Haidencyril: 打开工作台**
 - **Haidencyril: 记录一个碎片**
 - **Haidencyril: 按含义搜索知识库**
-- **Haidencyril: 导入课表或固定日程**
+- **Haidencyril: 查看日程建议**
+- **Haidencyril: 导入 .ics 固定日程**
 - **Haidencyril: 复制苹果快捷指令捕捉地址模板**
 - **Haidencyril: 重新打开当前已完成项目**
 
-苹果快捷指令和课表导入的设置步骤见 [苹果自动化](docs/APPLE-AUTOMATION.md)。
+苹果快捷指令、日程同步和 `.ics` 备用导入步骤见 [苹果自动化](docs/APPLE-AUTOMATION.md)。
 
 ## 开发命令
 
