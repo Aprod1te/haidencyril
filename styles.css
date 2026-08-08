@@ -278,6 +278,46 @@
 	max-width: 640px;
 }
 
+.haidencyril-history-modal {
+	max-width: 680px;
+}
+
+.haidencyril-history-source {
+	margin: 8px 0 18px;
+	color: var(--text-muted);
+	overflow-wrap: anywhere;
+}
+
+.haidencyril-history-list {
+	display: grid;
+	gap: 8px;
+}
+
+.haidencyril-history-item {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 18px;
+	padding: 13px 14px;
+	border: 1px solid var(--background-modifier-border);
+	border-radius: 12px;
+	background: var(--background-secondary);
+}
+
+.haidencyril-history-item > div,
+.haidencyril-history-item strong,
+.haidencyril-history-item time,
+.haidencyril-history-item span {
+	display: block;
+}
+
+.haidencyril-history-item time,
+.haidencyril-history-item span {
+	margin-top: 3px;
+	color: var(--text-muted);
+	font-size: var(--font-ui-smaller);
+}
+
 .haidencyril-connection-target {
 	margin: 8px 0 18px;
 	padding: 10px 12px;

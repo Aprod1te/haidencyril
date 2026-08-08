@@ -9,6 +9,7 @@ import { OllamaAnalysisService } from './services/ollama-analysis-service';
 import { CaptureModal, type CaptureSubmission } from './ui/capture-modal';
 import type { UserReflection } from './domain/analysis';
 import { ReflectionModal } from './ui/reflection-modal';
+import { AnalysisHistoryModal } from './ui/analysis-history-modal';
 import {
 	ManualConnectionModal,
 	ManualConnectionTargetModal,
@@ -107,6 +108,10 @@ export default class HaidencyrilPlugin extends Plugin {
 				}).open();
 			},
 		).open();
+	}
+
+	openAnalysisHistoryModal(sourceFile: TFile, analysisFiles: TFile[]): void {
+		new AnalysisHistoryModal(this.app, sourceFile, analysisFiles).open();
 	}
 
 	async analyzeFragment(file: TFile, reflection: UserReflection): Promise<TFile> {

@@ -16,6 +16,7 @@ interface FragmentEntry {
 	file: TFile;
 	body: string;
 	status: FragmentStatus;
+	analysisFiles: TFile[];
 }
 
 export class HaidencyrilWorkspaceView extends ItemView {
@@ -77,12 +78,18 @@ export class HaidencyrilWorkspaceView extends ItemView {
 		captureButton.addEventListener('click', () => this.plugin.openCaptureModal());
 
 		const files = this.plugin.repository.getInboxFiles();
+		const analysisHistory = await this.plugin.repository.getAnalysisHistory();
 		const entries = await Promise.all(
-			files.map(async (file): Promise<FragmentEntry> => ({
-				file,
-				body: await this.plugin.repository.readBody(file),
-				status: this.statusOf(file),
-			})),
+			files.map(async (file): Promise<FragmentEntry> => {
+				const analysisFiles = analysisHistory.get(file.path) ?? [];
+				return {
+					file,
+					body: await this.plugin.repository.readBody(file),
+					status:
+						analysisFiles.length > 0 ? 'analyzed' : this.statusOf(file),
+					analysisFiles,
+				};
+			}),
 		);
 		const analyzedCount = entries.filter(
 			(entry) => entry.status === 'analyzed',
@@ -159,7 +166,7 @@ export class HaidencyrilWorkspaceView extends ItemView {
 	}
 
 	private renderFragment(container: HTMLElement, entry: FragmentEntry): void {
-		const { body, file, status } = entry;
+		const { analysisFiles, body, file, status } = entry;
 		const card = container.createDiv({ cls: 'haidencyril-fragment-card' });
 		const top = card.createDiv({ cls: 'haidencyril-fragment-top' });
 		const titleButton = top.createEl('button', {
@@ -195,6 +202,15 @@ export class HaidencyrilWorkspaceView extends ItemView {
 		connectButton.addEventListener('click', () => {
 			this.plugin.openManualConnectionModal(file);
 		});
+		if (analysisFiles.length > 0) {
+			const historyButton = actions.createEl('button', {
+				text: `分析历史 ${analysisFiles.length}`,
+				cls: 'haidencyril-card-button',
+			});
+			historyButton.addEventListener('click', () => {
+				this.plugin.openAnalysisHistoryModal(file, analysisFiles);
+			});
+		}
 		const analyzeButton = actions.createEl('button', {
 			text: status === 'analyzed' ? '重新分析' : '共同分析',
 			cls: 'haidencyril-card-button haidencyril-card-button-primary',

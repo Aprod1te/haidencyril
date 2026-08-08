@@ -16,6 +16,8 @@ export interface ManualConnection {
 	reason: string;
 }
 
+export type AnalysisHistory = Map<string, TFile[]>;
+
 export class FragmentRepository {
 	constructor(
 		private readonly app: App,
@@ -51,6 +53,36 @@ ${normalizedContent}
 			.getMarkdownFiles()
 			.filter((file) => file.path.startsWith(prefix))
 			.sort((left, right) => right.stat.mtime - left.stat.mtime);
+	}
+
+	async getAnalysisHistory(): Promise<AnalysisHistory> {
+		const folder = normalizePath(this.getSettings().analysisFolder);
+		const prefix = `${folder}/`;
+		const analysisFiles = this.app.vault
+			.getMarkdownFiles()
+			.filter((file) => file.path.startsWith(prefix));
+		const sources = await Promise.all(
+			analysisFiles.map(async (file) => ({
+				file,
+				source: this.analysisSource(
+					await this.app.vault.cachedRead(file),
+					file,
+				),
+			})),
+		);
+		const history: AnalysisHistory = new Map();
+		for (const { file, source } of sources) {
+			if (!source) {
+				continue;
+			}
+			const files = history.get(source.path) ?? [];
+			files.push(file);
+			history.set(source.path, files);
+		}
+		for (const files of history.values()) {
+			files.sort((left, right) => right.stat.ctime - left.stat.ctime);
+		}
+		return history;
 	}
 
 	async readBody(file: TFile): Promise<string> {
@@ -215,6 +247,17 @@ ${normalizedContent}
 				await this.app.vault.createFolder(current);
 			}
 		}
+	}
+
+	private analysisSource(content: string, analysisFile: TFile): TFile | null {
+		const match = /^原始碎片：\[\[([^\]|]+)(?:\|[^\]]+)?\]\]\s*$/mu.exec(content);
+		if (!match?.[1]) {
+			return null;
+		}
+		return this.app.metadataCache.getFirstLinkpathDest(
+			match[1],
+			analysisFile.path,
+		);
 	}
 
 	private async availablePath(folder: string, title: string): Promise<string> {
