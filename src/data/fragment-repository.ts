@@ -1,5 +1,9 @@
 import { App, normalizePath, TFile, TFolder } from 'obsidian';
-import type { FragmentAnalysis, UserReflection } from '../domain/analysis';
+import type {
+	Confidence,
+	FragmentAnalysis,
+	UserReflection,
+} from '../domain/analysis';
 import { renderAnalysisMarkdown } from '../domain/analysis';
 import type { HaidencyrilSettings } from '../settings';
 
@@ -17,6 +21,19 @@ export interface ManualConnection {
 }
 
 export type AnalysisHistory = Map<string, TFile[]>;
+
+export type ConnectionDecision = 'accepted' | 'rejected' | 'later';
+
+export interface ReviewableConnection {
+	targetFile: TFile;
+	relation: string;
+	reason: string;
+	confidence: Confidence;
+}
+
+export interface ConnectionReview extends ReviewableConnection {
+	decision: ConnectionDecision;
+}
 
 export class FragmentRepository {
 	constructor(
@@ -83,6 +100,55 @@ ${normalizedContent}
 			files.sort((left, right) => right.stat.ctime - left.stat.ctime);
 		}
 		return history;
+	}
+
+	async getPendingConnectionSuggestions(
+		analysisFile: TFile,
+	): Promise<ReviewableConnection[]> {
+		const content = await this.app.vault.cachedRead(analysisFile);
+		const lines = content.split('\n');
+		const suggestionStart = lines.findIndex(
+			(line) => line.trim() === '## 可能的联系',
+		);
+		if (suggestionStart < 0) {
+			return [];
+		}
+		const suggestionEnd = this.nextSectionBoundary(lines, suggestionStart + 1);
+		const reviewedTargets = this.reviewedConnectionPaths(
+			lines,
+			analysisFile,
+		);
+		const confidenceByLabel: Record<string, Confidence> = {
+			低: 'low',
+			中: 'medium',
+			高: 'high',
+		};
+		const suggestions: ReviewableConnection[] = [];
+		for (let index = suggestionStart + 1; index < suggestionEnd; index += 1) {
+			const line = lines[index] ?? '';
+			const match =
+				/^- (?:- )?\[\[([^\]|]+)(?:\|[^\]]+)?\]\] · (.+?)（置信度：(低|中|高)）\s*$/u.exec(
+					line,
+				);
+			if (!match?.[1] || !match[2] || !match[3]) {
+				continue;
+			}
+			const targetFile = this.app.metadataCache.getFirstLinkpathDest(
+				match[1],
+				analysisFile.path,
+			);
+			if (!targetFile || reviewedTargets.has(targetFile.path)) {
+				continue;
+			}
+			const reasonMatch = /^\s+-\s+(.+)$/u.exec(lines[index + 1] ?? '');
+			suggestions.push({
+				targetFile,
+				relation: match[2],
+				reason: reasonMatch?.[1] ?? '暂时没有补充说明。',
+				confidence: confidenceByLabel[match[3]] ?? 'low',
+			});
+		}
+		return suggestions;
 	}
 
 	async readBody(file: TFile): Promise<string> {
@@ -196,6 +262,29 @@ ${normalizedContent}
 		return true;
 	}
 
+	async recordConnectionReview(
+		analysisFile: TFile,
+		review: ConnectionReview,
+	): Promise<void> {
+		const decisionLabels: Record<ConnectionDecision, string> = {
+			accepted: '已确认',
+			rejected: '不采纳',
+			later: '稍后判断',
+		};
+		const link = this.app.fileManager.generateMarkdownLink(
+			review.targetFile,
+			analysisFile.path,
+		);
+		const entry = [
+			`- ${link} · ${decisionLabels[review.decision]}`,
+			`  - 关系：${this.singleLine(review.relation)}`,
+			`  - 说明：${this.singleLine(review.reason)}`,
+		].join('\n');
+		await this.app.vault.process(analysisFile, (content) =>
+			this.insertUnderHeading(content, '你的关联判断', entry),
+		);
+	}
+
 	async removeLegacyPathMetadata(): Promise<void> {
 		const settings = this.getSettings();
 		const inboxPrefix = `${normalizePath(settings.inboxFolder)}/`;
@@ -258,6 +347,46 @@ ${normalizedContent}
 			match[1],
 			analysisFile.path,
 		);
+	}
+
+	private nextSectionBoundary(lines: string[], start: number): number {
+		for (let index = start; index < lines.length; index += 1) {
+			const line = lines[index]?.trim();
+			if (line?.startsWith('## ') || line === '---') {
+				return index;
+			}
+		}
+		return lines.length;
+	}
+
+	private reviewedConnectionPaths(
+		lines: string[],
+		analysisFile: TFile,
+	): Set<string> {
+		const reviewStart = lines.findIndex(
+			(line) => line.trim() === '## 你的关联判断',
+		);
+		if (reviewStart < 0) {
+			return new Set();
+		}
+		const reviewEnd = this.nextSectionBoundary(lines, reviewStart + 1);
+		const paths = new Set<string>();
+		for (let index = reviewStart + 1; index < reviewEnd; index += 1) {
+			const match = /^- \[\[([^\]|]+)(?:\|[^\]]+)?\]\]/u.exec(
+				lines[index] ?? '',
+			);
+			if (!match?.[1]) {
+				continue;
+			}
+			const target = this.app.metadataCache.getFirstLinkpathDest(
+				match[1],
+				analysisFile.path,
+			);
+			if (target) {
+				paths.add(target.path);
+			}
+		}
+		return paths;
 	}
 
 	private async availablePath(folder: string, title: string): Promise<string> {

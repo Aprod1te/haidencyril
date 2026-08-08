@@ -11,6 +11,11 @@ import type { UserReflection } from './domain/analysis';
 import { ReflectionModal } from './ui/reflection-modal';
 import { AnalysisHistoryModal } from './ui/analysis-history-modal';
 import {
+	AiConnectionReviewModal,
+	type ConnectionReviewSubmission,
+} from './ui/ai-connection-review-modal';
+import type { ReviewableConnection } from './data/fragment-repository';
+import {
 	ManualConnectionModal,
 	ManualConnectionTargetModal,
 } from './ui/manual-connection-modal';
@@ -114,6 +119,20 @@ export default class HaidencyrilPlugin extends Plugin {
 		new AnalysisHistoryModal(this.app, sourceFile, analysisFiles).open();
 	}
 
+	openAiConnectionReviewModal(
+		sourceFile: TFile,
+		analysisFile: TFile,
+		suggestions: ReviewableConnection[],
+	): void {
+		new AiConnectionReviewModal(
+			this.app,
+			suggestions,
+			(submission) =>
+				this.handleConnectionReview(sourceFile, analysisFile, submission),
+			() => this.refreshWorkspace(),
+		).open();
+	}
+
 	async analyzeFragment(file: TFile, reflection: UserReflection): Promise<TFile> {
 		if (!this.settings.aiEnabled) {
 			throw new Error('请先在 Haidencyril 设置中启用本地 AI 分析');
@@ -139,6 +158,15 @@ export default class HaidencyrilPlugin extends Plugin {
 		await this.refreshWorkspace();
 		if (this.settings.openAnalysisAfterGeneration) {
 			await this.app.workspace.getLeaf(true).openFile(analysisFile);
+		}
+		const suggestions =
+			await this.repository.getPendingConnectionSuggestions(analysisFile);
+		if (suggestions.length > 0) {
+			window.setTimeout(
+				() =>
+					this.openAiConnectionReviewModal(file, analysisFile, suggestions),
+				0,
+			);
 		}
 		return analysisFile;
 	}
@@ -171,6 +199,17 @@ export default class HaidencyrilPlugin extends Plugin {
 		if (submission.analyze) {
 			window.setTimeout(() => this.openReflectionModal(file), 0);
 		}
+	}
+
+	private async handleConnectionReview(
+		sourceFile: TFile,
+		analysisFile: TFile,
+		submission: ConnectionReviewSubmission,
+	): Promise<void> {
+		if (submission.decision === 'accepted') {
+			await this.repository.addManualConnection(sourceFile, submission);
+		}
+		await this.repository.recordConnectionReview(analysisFile, submission);
 	}
 
 	private async refreshWorkspace(): Promise<void> {

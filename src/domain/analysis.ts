@@ -77,7 +77,7 @@ function bulletList(items: string[], emptyText: string): string {
 	if (items.length === 0) {
 		return `- ${emptyText}`;
 	}
-	return items.map((item) => `- ${item}`).join('\n');
+	return items.join('\n');
 }
 
 function wikiLink(path: string): string {
@@ -99,6 +99,7 @@ export function renderAnalysisMarkdown(
 			`- **${item.statement}**（置信度：${CONFIDENCE_LABELS[item.confidence]}）\n  - 依据：${item.evidence}`,
 	);
 	const questions = analysis.questions.map((question) => `- [ ] ${question}`);
+	const unknowns = analysis.unknowns.map((unknown) => `- ${unknown}`);
 	const aligned = analysis.reflectionComparison.aligned.map((item) => `- ${item}`);
 	const challenges = analysis.reflectionComparison.challenges.map(
 		(item) => `- ${item}`,
@@ -145,7 +146,7 @@ ${bulletList(interpretations, '暂时没有形成可靠假设。')}
 
 ## 尚不清楚
 
-${bulletList(analysis.unknowns, '暂时没有额外未知项。')}
+${bulletList(unknowns, '暂时没有额外未知项。')}
 
 ## 需要你思考
 

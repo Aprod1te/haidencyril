@@ -282,6 +282,29 @@
 	max-width: 680px;
 }
 
+.haidencyril-ai-review-modal {
+	max-width: 680px;
+}
+
+.haidencyril-ai-review-target {
+	margin: 16px 0 18px;
+	padding: 13px 14px;
+	border: 1px solid var(--background-modifier-border);
+	border-radius: 12px;
+	background: var(--background-secondary);
+}
+
+.haidencyril-ai-review-target strong,
+.haidencyril-ai-review-target span {
+	display: block;
+}
+
+.haidencyril-ai-review-target span {
+	margin-top: 4px;
+	color: var(--text-muted);
+	font-size: var(--font-ui-smaller);
+}
+
 .haidencyril-history-source {
 	margin: 8px 0 18px;
 	color: var(--text-muted);

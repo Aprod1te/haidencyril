@@ -6,6 +6,7 @@ import {
 	WorkspaceLeaf,
 } from 'obsidian';
 import type HaidencyrilPlugin from '../main';
+import type { ReviewableConnection } from '../data/fragment-repository';
 
 export const HAIDENCYRIL_VIEW_TYPE = 'haidencyril-workspace';
 
@@ -17,11 +18,19 @@ interface FragmentEntry {
 	body: string;
 	status: FragmentStatus;
 	analysisFiles: TFile[];
+	pendingReview: PendingConnectionReview | null;
+	pendingSuggestionCount: number;
+}
+
+interface PendingConnectionReview {
+	analysisFile: TFile;
+	suggestions: ReviewableConnection[];
 }
 
 export class HaidencyrilWorkspaceView extends ItemView {
 	private searchQuery = '';
 	private statusFilter: FragmentStatusFilter = 'all';
+	private refreshVersion = 0;
 
 	constructor(
 		leaf: WorkspaceLeaf,
@@ -47,6 +56,7 @@ export class HaidencyrilWorkspaceView extends ItemView {
 	}
 
 	async refresh(): Promise<void> {
+		const refreshVersion = ++this.refreshVersion;
 		const root = this.containerEl.children[1];
 		if (!(root instanceof HTMLElement)) {
 			return;
@@ -82,15 +92,35 @@ export class HaidencyrilWorkspaceView extends ItemView {
 		const entries = await Promise.all(
 			files.map(async (file): Promise<FragmentEntry> => {
 				const analysisFiles = analysisHistory.get(file.path) ?? [];
+				const reviews = await Promise.all(
+					analysisFiles.map(async (analysisFile) => ({
+						analysisFile,
+						suggestions:
+							await this.plugin.repository.getPendingConnectionSuggestions(
+								analysisFile,
+							),
+					})),
+				);
+				const pendingReviews = reviews.filter(
+					(review) => review.suggestions.length > 0,
+				);
 				return {
 					file,
 					body: await this.plugin.repository.readBody(file),
 					status:
 						analysisFiles.length > 0 ? 'analyzed' : this.statusOf(file),
 					analysisFiles,
+					pendingReview: pendingReviews[0] ?? null,
+					pendingSuggestionCount: pendingReviews.reduce(
+						(total, review) => total + review.suggestions.length,
+						0,
+					),
 				};
 			}),
 		);
+		if (refreshVersion !== this.refreshVersion) {
+			return;
+		}
 		const analyzedCount = entries.filter(
 			(entry) => entry.status === 'analyzed',
 		).length;
@@ -166,7 +196,14 @@ export class HaidencyrilWorkspaceView extends ItemView {
 	}
 
 	private renderFragment(container: HTMLElement, entry: FragmentEntry): void {
-		const { analysisFiles, body, file, status } = entry;
+		const {
+			analysisFiles,
+			body,
+			file,
+			pendingReview,
+			pendingSuggestionCount,
+			status,
+		} = entry;
 		const card = container.createDiv({ cls: 'haidencyril-fragment-card' });
 		const top = card.createDiv({ cls: 'haidencyril-fragment-top' });
 		const titleButton = top.createEl('button', {
@@ -209,6 +246,19 @@ export class HaidencyrilWorkspaceView extends ItemView {
 			});
 			historyButton.addEventListener('click', () => {
 				this.plugin.openAnalysisHistoryModal(file, analysisFiles);
+			});
+		}
+		if (pendingReview) {
+			const reviewButton = actions.createEl('button', {
+				text: `审核建议 ${pendingSuggestionCount}`,
+				cls: 'haidencyril-card-button haidencyril-card-button-primary',
+			});
+			reviewButton.addEventListener('click', () => {
+				this.plugin.openAiConnectionReviewModal(
+					file,
+					pendingReview.analysisFile,
+					pendingReview.suggestions,
+				);
 			});
 		}
 		const analyzeButton = actions.createEl('button', {
