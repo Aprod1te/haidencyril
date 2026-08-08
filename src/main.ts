@@ -1,11 +1,22 @@
 import { Notice, Plugin, TFile } from 'obsidian';
-import { FragmentRepository } from './data/fragment-repository';
+import {
+	FragmentRepository,
+	type ProjectDraft,
+} from './data/fragment-repository';
 import {
 	DEFAULT_SETTINGS,
 	HaidencyrilSettingTab,
 	type HaidencyrilSettings,
 } from './settings';
 import { OllamaAnalysisService } from './services/ollama-analysis-service';
+import { SemanticSearchService } from './services/semantic-search-service';
+import { IcsCourseImportService } from './services/ics-course-import-service';
+import { ScheduleRepository } from './data/schedule-repository';
+import {
+	findScheduleProposal,
+	type ScheduleProposal,
+	type ScheduleRequest,
+} from './domain/schedule';
 import { CaptureModal, type CaptureSubmission } from './ui/capture-modal';
 import type { UserReflection } from './domain/analysis';
 import { ReflectionModal } from './ui/reflection-modal';
@@ -19,6 +30,11 @@ import {
 	ManualConnectionModal,
 	ManualConnectionTargetModal,
 } from './ui/manual-connection-modal';
+import { ProjectPromotionModal } from './ui/project-promotion-modal';
+import { ProjectReviewModal } from './ui/project-review-modal';
+import { SemanticSearchModal } from './ui/semantic-search-modal';
+import { CourseImportModal } from './ui/course-import-modal';
+import { ScheduleModal } from './ui/schedule-modal';
 import {
 	HAIDENCYRIL_VIEW_TYPE,
 	HaidencyrilWorkspaceView,
@@ -28,12 +44,24 @@ export default class HaidencyrilPlugin extends Plugin {
 	settings!: HaidencyrilSettings;
 	repository!: FragmentRepository;
 	private analysisService!: OllamaAnalysisService;
+	private semanticSearchService!: SemanticSearchService;
+	private courseImportService!: IcsCourseImportService;
+	private scheduleRepository!: ScheduleRepository;
 
 	async onload(): Promise<void> {
 		await this.loadSettings();
 		this.repository = new FragmentRepository(this.app, () => this.settings);
 		await this.repository.removeLegacyPathMetadata();
 		this.analysisService = new OllamaAnalysisService();
+		this.semanticSearchService = new SemanticSearchService(
+			this.app,
+			this.repository,
+		);
+		this.courseImportService = new IcsCourseImportService();
+		this.scheduleRepository = new ScheduleRepository(
+			this.app,
+			() => this.settings,
+		);
 
 		this.registerView(
 			HAIDENCYRIL_VIEW_TYPE,
@@ -52,6 +80,46 @@ export default class HaidencyrilPlugin extends Plugin {
 			name: '记录一个碎片',
 			callback: () => this.openCaptureModal(),
 		});
+		this.addCommand({
+			id: 'semantic-search',
+			name: '按含义搜索知识库',
+			callback: () => this.openSemanticSearchModal(),
+		});
+		this.addCommand({
+			id: 'import-course-calendar',
+			name: '导入课表或固定日程',
+			callback: () => this.openCourseImportModal(),
+		});
+		this.addCommand({
+			id: 'copy-shortcut-capture-url',
+			name: '复制苹果快捷指令捕捉地址模板',
+			callback: () => void this.copyShortcutCaptureUrl(),
+		});
+		this.addCommand({
+			id: 'reopen-completed-project',
+			name: '重新打开当前已完成项目',
+			checkCallback: (checking) => {
+				const file = this.app.workspace.getActiveFile();
+				const isCompletedProject =
+					file instanceof TFile &&
+					this.app.metadataCache.getFileCache(file)?.frontmatter?.[
+						'haidencyril_type'
+					] === 'project' &&
+					this.app.metadataCache.getFileCache(file)?.frontmatter?.[
+						'haidencyril_status'
+					] === 'completed';
+				if (isCompletedProject && !checking) {
+					void this.repository.reopenProject(file).then(() =>
+						this.refreshWorkspace(),
+					);
+				}
+				return isCompletedProject;
+			},
+		});
+		this.registerObsidianProtocolHandler(
+			'haidencyril-capture',
+			(params) => void this.handleProtocolCapture(params),
+		);
 		this.addSettingTab(new HaidencyrilSettingTab(this.app, this));
 
 		this.registerEvent(
@@ -133,6 +201,60 @@ export default class HaidencyrilPlugin extends Plugin {
 		).open();
 	}
 
+	openProjectPromotionModal(sourceFile: TFile): void {
+		new ProjectPromotionModal(
+			this.app,
+			sourceFile,
+			this.repository.getInboxFiles(),
+			(draft) => this.createProject(draft).then(() => undefined),
+		).open();
+	}
+
+	openProjectReviewModal(projectFile: TFile): void {
+		new ProjectReviewModal(
+			this.app,
+			projectFile.basename,
+			async (review) => {
+				await this.repository.completeProject(projectFile, review);
+				new Notice('项目已完成，复盘已经保留');
+				await this.refreshWorkspace();
+			},
+		).open();
+	}
+
+	openSemanticSearchModal(): void {
+		new SemanticSearchModal(
+			this.app,
+			(query) =>
+				this.semanticSearchService.search(
+					query,
+					this.settings.embeddingModel,
+				),
+			(file) => this.app.workspace.getLeaf(true).openFile(file),
+		).open();
+	}
+
+	openCourseImportModal(): void {
+		new CourseImportModal(this.app, async (content, sourceName) => {
+			const blocks = this.courseImportService.parse(content);
+			const file = await this.scheduleRepository.saveImportedCourses(
+				blocks,
+				sourceName,
+			);
+			await this.app.workspace.getLeaf(true).openFile(file);
+			return blocks.length;
+		}).open();
+	}
+
+	openScheduleModal(projectFile: TFile, nextAction: string): void {
+		new ScheduleModal(
+			this.app,
+			nextAction,
+			(request) => this.generateScheduleProposal(request),
+			(proposal) => this.confirmSchedule(projectFile, proposal),
+		).open();
+	}
+
 	async analyzeFragment(file: TFile, reflection: UserReflection): Promise<TFile> {
 		if (!this.settings.aiEnabled) {
 			throw new Error('请先在 Haidencyril 设置中启用本地 AI 分析');
@@ -210,6 +332,72 @@ export default class HaidencyrilPlugin extends Plugin {
 			await this.repository.addManualConnection(sourceFile, submission);
 		}
 		await this.repository.recordConnectionReview(analysisFile, submission);
+	}
+
+	private async createProject(draft: ProjectDraft): Promise<TFile> {
+		const projectFile = await this.repository.createProject(draft);
+		new Notice('项目已创建，下一步行动已经写入');
+		await this.refreshWorkspace();
+		await this.app.workspace.getLeaf(true).openFile(projectFile);
+		return projectFile;
+	}
+
+	private async generateScheduleProposal(
+		request: ScheduleRequest,
+	): Promise<ScheduleProposal | null> {
+		return findScheduleProposal(
+			request,
+			await this.scheduleRepository.getBusyBlocks(),
+		);
+	}
+
+	private async confirmSchedule(
+		projectFile: TFile,
+		proposal: ScheduleProposal,
+	): Promise<void> {
+		await this.scheduleRepository.createScheduleDraft(projectFile, proposal);
+		await this.refreshWorkspace();
+		const shortcutName = this.settings.calendarShortcutName.trim();
+		if (!shortcutName) {
+			new Notice('日程草案已保存；未配置苹果日历快捷指令');
+			return;
+		}
+		const payload = JSON.stringify({
+			title: proposal.title,
+			start: proposal.start.toISOString(),
+			end: proposal.end.toISOString(),
+			notes: `来自 Haidencyril 项目：${projectFile.basename}`,
+		});
+		const url = `shortcuts://run-shortcut?name=${encodeURIComponent(shortcutName)}&input=text&text=${encodeURIComponent(payload)}`;
+		window.open(url);
+		new Notice('日程草案已保存，并已交给苹果快捷指令');
+	}
+
+	private async handleProtocolCapture(
+		params: Record<string, string>,
+	): Promise<void> {
+		const content = params['content']?.trim() ?? '';
+		if (!content) {
+			new Notice('快捷指令没有传入可记录的内容');
+			return;
+		}
+		try {
+			const file = await this.repository.createFragment(content);
+			new Notice('快捷指令内容已保存');
+			await this.refreshWorkspace();
+			if (params['analyze'] === 'true' && this.settings.aiEnabled) {
+				window.setTimeout(() => this.openReflectionModal(file), 0);
+			}
+		} catch (error) {
+			new Notice(error instanceof Error ? error.message : '快捷捕捉失败');
+		}
+	}
+
+	private async copyShortcutCaptureUrl(): Promise<void> {
+		const vault = encodeURIComponent(this.app.vault.getName());
+		const template = `obsidian://haidencyril-capture?vault=${vault}&content=[URL 编码后的内容]`;
+		await navigator.clipboard.writeText(template);
+		new Notice('快捷指令捕捉地址模板已复制');
 	}
 
 	private async refreshWorkspace(): Promise<void> {

@@ -6,7 +6,10 @@ import {
 	WorkspaceLeaf,
 } from 'obsidian';
 import type HaidencyrilPlugin from '../main';
-import type { ReviewableConnection } from '../data/fragment-repository';
+import type {
+	ProjectSummary,
+	ReviewableConnection,
+} from '../data/fragment-repository';
 
 export const HAIDENCYRIL_VIEW_TYPE = 'haidencyril-workspace';
 
@@ -81,6 +84,20 @@ export class HaidencyrilWorkspaceView extends ItemView {
 			cls: 'haidencyril-secondary-button',
 		});
 		refreshButton.addEventListener('click', () => void this.refresh());
+		const semanticButton = actions.createEl('button', {
+			text: '语义搜索',
+			cls: 'haidencyril-secondary-button',
+		});
+		semanticButton.addEventListener('click', () =>
+			this.plugin.openSemanticSearchModal(),
+		);
+		const coursesButton = actions.createEl('button', {
+			text: '导入课表',
+			cls: 'haidencyril-secondary-button',
+		});
+		coursesButton.addEventListener('click', () =>
+			this.plugin.openCourseImportModal(),
+		);
 		const captureButton = actions.createEl('button', {
 			text: '＋ 记录碎片',
 			cls: 'mod-cta',
@@ -88,7 +105,10 @@ export class HaidencyrilWorkspaceView extends ItemView {
 		captureButton.addEventListener('click', () => this.plugin.openCaptureModal());
 
 		const files = this.plugin.repository.getInboxFiles();
-		const analysisHistory = await this.plugin.repository.getAnalysisHistory();
+		const [analysisHistory, projects] = await Promise.all([
+			this.plugin.repository.getAnalysisHistory(),
+			this.plugin.repository.getProjects(),
+		]);
 		const entries = await Promise.all(
 			files.map(async (file): Promise<FragmentEntry> => {
 				const analysisFiles = analysisHistory.get(file.path) ?? [];
@@ -124,10 +144,28 @@ export class HaidencyrilWorkspaceView extends ItemView {
 		const analyzedCount = entries.filter(
 			(entry) => entry.status === 'analyzed',
 		).length;
+		const activeProjects = projects.filter(
+			(project) => project.status === 'active',
+		);
+		const completedProjects = projects.filter(
+			(project) => project.status === 'completed',
+		);
 		const overview = root.createDiv({ cls: 'haidencyril-overview' });
 		this.addMetric(overview, '全部碎片', files.length.toString());
 		this.addMetric(overview, '待理解', (files.length - analyzedCount).toString());
 		this.addMetric(overview, '已有分析', analyzedCount.toString());
+		this.addMetric(
+			overview,
+			'推进中 / 已完成',
+			`${activeProjects.length} / ${completedProjects.length}`,
+		);
+
+		if (activeProjects.length > 0) {
+			this.renderProjects(root, activeProjects);
+		}
+		if (completedProjects.length > 0) {
+			this.renderCompletedProjects(root, completedProjects.slice(0, 4));
+		}
 
 		const sectionHeader = root.createDiv({ cls: 'haidencyril-section-header' });
 		sectionHeader.createEl('h2', { text: '收件箱' });
@@ -239,6 +277,13 @@ export class HaidencyrilWorkspaceView extends ItemView {
 		connectButton.addEventListener('click', () => {
 			this.plugin.openManualConnectionModal(file);
 		});
+		const promoteButton = actions.createEl('button', {
+			text: '形成项目',
+			cls: 'haidencyril-card-button',
+		});
+		promoteButton.addEventListener('click', () => {
+			this.plugin.openProjectPromotionModal(file);
+		});
 		if (analysisFiles.length > 0) {
 			const historyButton = actions.createEl('button', {
 				text: `分析历史 ${analysisFiles.length}`,
@@ -268,6 +313,74 @@ export class HaidencyrilWorkspaceView extends ItemView {
 		analyzeButton.addEventListener('click', () => {
 			this.plugin.openReflectionModal(file);
 		});
+	}
+
+	private renderProjects(
+		container: HTMLElement,
+		projects: ProjectSummary[],
+	): void {
+		const header = container.createDiv({
+			cls: 'haidencyril-section-header haidencyril-projects-header',
+		});
+		header.createEl('h2', { text: '正在推进' });
+		header.createSpan({ text: `${projects.length} 个项目` });
+		const list = container.createDiv({ cls: 'haidencyril-project-list' });
+		for (const project of projects) {
+			const card = list.createDiv({ cls: 'haidencyril-project-card' });
+			const top = card.createDiv({ cls: 'haidencyril-project-card-top' });
+			const content = top.createDiv();
+			const titleButton = content.createEl('button', {
+				text: project.file.basename,
+				cls: 'haidencyril-project-title',
+			});
+			titleButton.addEventListener('click', () => void this.openFile(project.file));
+			content.createEl('p', { text: project.goal });
+			top.createSpan({
+				text: `${project.sourceCount} 条碎片`,
+				cls: 'haidencyril-status haidencyril-status-analyzed',
+			});
+			const next = card.createDiv({ cls: 'haidencyril-project-next' });
+			next.createSpan({ text: '下一步' });
+			next.createEl('strong', { text: project.nextAction });
+			const actions = card.createDiv({ cls: 'haidencyril-project-actions' });
+			const scheduleButton = actions.createEl('button', {
+				text: '安排下一步',
+				cls: 'haidencyril-card-button',
+			});
+			scheduleButton.addEventListener('click', () =>
+				this.plugin.openScheduleModal(project.file, project.nextAction),
+			);
+			const completeButton = actions.createEl('button', {
+				text: '完成并复盘',
+				cls: 'haidencyril-card-button haidencyril-card-button-primary',
+			});
+			completeButton.addEventListener('click', () =>
+				this.plugin.openProjectReviewModal(project.file),
+			);
+		}
+	}
+
+	private renderCompletedProjects(
+		container: HTMLElement,
+		projects: ProjectSummary[],
+	): void {
+		const header = container.createDiv({
+			cls: 'haidencyril-section-header haidencyril-completed-header',
+		});
+		header.createEl('h2', { text: '最近完成' });
+		header.createSpan({ text: '结果可以继续沉淀为新碎片' });
+		const list = container.createDiv({ cls: 'haidencyril-completed-list' });
+		for (const project of projects) {
+			const card = list.createDiv({ cls: 'haidencyril-completed-card' });
+			const title = card.createEl('button', {
+				text: project.file.basename,
+				cls: 'haidencyril-project-title',
+			});
+			title.addEventListener('click', () => void this.openFile(project.file));
+			card.createEl('p', {
+				text: project.outcome || '已完成，打开项目查看复盘。',
+			});
+		}
 	}
 
 	private filterEntries(entries: FragmentEntry[]): FragmentEntry[] {

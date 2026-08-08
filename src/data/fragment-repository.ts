@@ -35,6 +35,32 @@ export interface ConnectionReview extends ReviewableConnection {
 	decision: ConnectionDecision;
 }
 
+export interface ProjectDraft {
+	title: string;
+	goal: string;
+	whyNow: string;
+	successCriteria: string[];
+	sourceFiles: TFile[];
+	risks: string[];
+	validations: string[];
+	nextActions: string[];
+}
+
+export interface ProjectSummary {
+	file: TFile;
+	goal: string;
+	nextAction: string;
+	sourceCount: number;
+	status: 'active' | 'completed';
+	outcome: string;
+}
+
+export interface ProjectReview {
+	outcome: string;
+	evidence: string;
+	lessons: string;
+}
+
 export class FragmentRepository {
 	constructor(
 		private readonly app: App,
@@ -70,6 +96,179 @@ ${normalizedContent}
 			.getMarkdownFiles()
 			.filter((file) => file.path.startsWith(prefix))
 			.sort((left, right) => right.stat.mtime - left.stat.mtime);
+	}
+
+	getSemanticSearchFiles(): TFile[] {
+		const settings = this.getSettings();
+		const excludedPrefixes = [settings.analysisFolder, settings.scheduleFolder].map(
+			(folder) => `${normalizePath(folder)}/`,
+		);
+		return this.app.vault
+			.getMarkdownFiles()
+			.filter((file) => !file.path.startsWith('.'))
+			.filter(
+				(file) => !excludedPrefixes.some((prefix) => file.path.startsWith(prefix)),
+			)
+			.sort((left, right) => right.stat.mtime - left.stat.mtime)
+			.slice(0, 500);
+	}
+
+	async getProjects(): Promise<ProjectSummary[]> {
+		const folder = normalizePath(this.getSettings().projectsFolder);
+		const prefix = `${folder}/`;
+		const files = this.app.vault
+			.getMarkdownFiles()
+			.filter((file) => file.path.startsWith(prefix))
+			.sort((left, right) => right.stat.mtime - left.stat.mtime);
+
+		const projects = await Promise.all(
+			files.map(async (file): Promise<ProjectSummary | null> => {
+				const content = await this.app.vault.cachedRead(file);
+				if (!/^haidencyril_type:\s*project\s*$/mu.test(content)) {
+					return null;
+				}
+				const status = /^haidencyril_status:\s*completed\s*$/mu.test(content)
+					? 'completed'
+					: 'active';
+				return {
+					file,
+					goal: this.sectionText(content, '目标') || '还没有写下项目目标。',
+					nextAction:
+						this.firstTask(content, '下一步行动') || '还没有写下下一步行动。',
+					sourceCount: this.sectionWikiLinkCount(content, '来源碎片'),
+					status,
+					outcome: this.subsectionText(content, '实际结果'),
+				};
+			}),
+		);
+		return projects.filter(
+			(project): project is ProjectSummary => project !== null,
+		);
+	}
+
+	async createProject(draft: ProjectDraft): Promise<TFile> {
+		const title = draft.title.trim();
+		const goal = draft.goal.trim();
+		const successCriteria = this.nonEmptyLines(draft.successCriteria);
+		const nextActions = this.nonEmptyLines(draft.nextActions);
+		const sourceFiles = [...new Map(
+			draft.sourceFiles.map((file) => [file.path, file]),
+		).values()];
+		if (title.length === 0) {
+			throw new Error('项目名称不能为空');
+		}
+		if (goal.length === 0) {
+			throw new Error('请先写下项目目标');
+		}
+		if (successCriteria.length === 0) {
+			throw new Error('请写下至少一条完成标准');
+		}
+		if (nextActions.length === 0) {
+			throw new Error('请写下至少一个下一步行动');
+		}
+		if (sourceFiles.length === 0) {
+			throw new Error('项目至少需要一条来源碎片');
+		}
+
+		const settings = this.getSettings();
+		await this.ensureFolder(settings.projectsFolder);
+		const path = await this.availablePath(settings.projectsFolder, title);
+		const createdAt = new Date().toISOString();
+		const sourceLinks = sourceFiles.map((file) =>
+			`- ${this.app.fileManager.generateMarkdownLink(file, path)}`,
+		);
+		const risks = this.nonEmptyLines(draft.risks);
+		const validations = this.nonEmptyLines(draft.validations);
+		const markdown = `---
+haidencyril_type: project
+haidencyril_status: active
+haidencyril_created: ${JSON.stringify(createdAt)}
+---
+
+# ${this.singleLine(title)}
+
+> [!info] 项目边界
+> 这份项目由你的判断推动。系统负责聚合碎片和保持结构，不替你决定目标或优先级。
+
+## 为什么现在做
+
+${draft.whyNow.trim() || '暂时没有单独说明。'}
+
+## 目标
+
+${goal}
+
+## 完成标准
+
+${successCriteria.map((item) => `- [ ] ${item}`).join('\n')}
+
+## 来源碎片
+
+${sourceLinks.join('\n')}
+
+## 风险
+
+${risks.length > 0 ? risks.map((item) => `- ${item}`).join('\n') : '- 暂未识别明确风险。'}
+
+## 待验证
+
+${validations.length > 0 ? validations.map((item) => `- [ ] ${item}`).join('\n') : '- 暂无。'}
+
+## 下一步行动
+
+${nextActions.map((item) => `- [ ] ${item}`).join('\n')}
+`;
+
+		return this.app.vault.create(path, markdown);
+	}
+
+	async completeProject(file: TFile, review: ProjectReview): Promise<void> {
+		const outcome = review.outcome.trim();
+		const lessons = review.lessons.trim();
+		if (outcome.length === 0) {
+			throw new Error('请写下实际发生了什么');
+		}
+		if (lessons.length === 0) {
+			throw new Error('请写下至少一条值得保留的经验');
+		}
+		const completedAt = new Date().toISOString();
+		await this.app.fileManager.processFrontMatter(
+			file,
+			(frontmatter: Record<string, unknown>) => {
+				frontmatter['haidencyril_status'] = 'completed';
+				frontmatter['haidencyril_completed'] = completedAt;
+			},
+		);
+		const section = `## 完成复盘
+
+完成时间：${completedAt}
+
+### 实际结果
+
+${outcome}
+
+### 可核对的依据
+
+${review.evidence.trim() || '暂时没有单独补充依据。'}
+
+### 保留的经验
+
+${lessons}
+`;
+		await this.app.vault.process(
+			file,
+			(content) => `${content.trimEnd()}\n\n${section}`,
+		);
+	}
+
+	async reopenProject(file: TFile): Promise<void> {
+		await this.app.fileManager.processFrontMatter(
+			file,
+			(frontmatter: Record<string, unknown>) => {
+				frontmatter['haidencyril_status'] = 'active';
+				delete frontmatter['haidencyril_completed'];
+			},
+		);
 	}
 
 	async getAnalysisHistory(): Promise<AnalysisHistory> {
@@ -389,6 +588,63 @@ ${normalizedContent}
 		return paths;
 	}
 
+	private sectionText(content: string, heading: string): string {
+		const section = this.sectionContent(content, heading);
+		return section
+			.split('\n')
+			.map((line) => line.trim())
+			.filter(Boolean)
+			.join(' ');
+	}
+
+	private subsectionText(content: string, heading: string): string {
+		const lines = content.split('\n');
+		let start = -1;
+		for (let index = lines.length - 1; index >= 0; index -= 1) {
+			if (lines[index]?.trim() === `### ${heading}`) {
+				start = index;
+				break;
+			}
+		}
+		if (start < 0) {
+			return '';
+		}
+		let end = lines.length;
+		for (let index = start + 1; index < lines.length; index += 1) {
+			const line = lines[index]?.trim();
+			if (line?.startsWith('## ') || line?.startsWith('### ')) {
+				end = index;
+				break;
+			}
+		}
+		return lines
+			.slice(start + 1, end)
+			.map((line) => line.trim())
+			.filter(Boolean)
+			.join(' ');
+	}
+
+	private firstTask(content: string, heading: string): string {
+		const section = this.sectionContent(content, heading);
+		const match = /^- \[ \]\s+(.+)$/mu.exec(section);
+		return match?.[1]?.trim() ?? '';
+	}
+
+	private sectionWikiLinkCount(content: string, heading: string): number {
+		return (this.sectionContent(content, heading).match(/\[\[[^\]]+\]\]/gu) ?? [])
+			.length;
+	}
+
+	private sectionContent(content: string, heading: string): string {
+		const lines = content.split('\n');
+		const start = lines.findIndex((line) => line.trim() === `## ${heading}`);
+		if (start < 0) {
+			return '';
+		}
+		const end = this.nextSectionBoundary(lines, start + 1);
+		return lines.slice(start + 1, end).join('\n').trim();
+	}
+
 	private async availablePath(folder: string, title: string): Promise<string> {
 		const safeTitle = this.sanitizeFilename(title);
 		let suffix = 0;
@@ -455,6 +711,10 @@ ${normalizedContent}
 
 	private singleLine(value: string): string {
 		return value.trim().replace(/\s+/gu, ' ');
+	}
+
+	private nonEmptyLines(values: string[]): string[] {
+		return values.map((value) => this.singleLine(value)).filter(Boolean);
 	}
 
 	private insertUnderHeading(

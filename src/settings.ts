@@ -10,8 +10,11 @@ export interface HaidencyrilSettings {
 	inboxFolder: string;
 	analysisFolder: string;
 	projectsFolder: string;
+	scheduleFolder: string;
 	aiEnabled: boolean;
 	model: string;
+	embeddingModel: string;
+	calendarShortcutName: string;
 	openAnalysisAfterGeneration: boolean;
 }
 
@@ -19,8 +22,11 @@ export const DEFAULT_SETTINGS: HaidencyrilSettings = {
 	inboxFolder: 'Haidencyril/Inbox',
 	analysisFolder: 'Haidencyril/Analysis',
 	projectsFolder: 'Haidencyril/Projects',
+	scheduleFolder: 'Haidencyril/Schedule',
 	aiEnabled: true,
 	model: 'qwen3.5:9b',
+	embeddingModel: 'qwen3-embedding:0.6b',
+	calendarShortcutName: 'Haidencyril 日程',
 	openAnalysisAfterGeneration: true,
 };
 
@@ -49,6 +55,7 @@ export class HaidencyrilSettingTab extends PluginSettingTab {
 			'analysisFolder',
 		);
 		this.addFolderSetting('项目', '由碎片逐渐形成的项目。', 'projectsFolder');
+		this.addFolderSetting('日程', '导入课表、日程草案和确认记录。', 'scheduleFolder');
 
 		new Setting(containerEl).setName('AI 分析').setHeading();
 		new Setting(containerEl)
@@ -72,6 +79,34 @@ export class HaidencyrilSettingTab extends PluginSettingTab {
 					.setValue(this.plugin.settings.model)
 					.onChange(async (value) => {
 						this.plugin.settings.model = value.trim() || DEFAULT_SETTINGS.model;
+						await this.plugin.saveSettings();
+					}),
+			);
+
+		new Setting(containerEl)
+			.setName('语义检索模型')
+			.setDesc('本地嵌入模型，默认版本约 639 兆字节。')
+			.addText((text) =>
+				text
+					.setPlaceholder(DEFAULT_SETTINGS.embeddingModel)
+					.setValue(this.plugin.settings.embeddingModel)
+					.onChange(async (value) => {
+						this.plugin.settings.embeddingModel =
+							value.trim() || DEFAULT_SETTINGS.embeddingModel;
+						await this.plugin.saveSettings();
+					}),
+			);
+
+		new Setting(containerEl).setName('苹果自动化').setHeading();
+		new Setting(containerEl)
+			.setName('日历快捷指令名称')
+			.setDesc('确认日程后调用的苹果快捷指令；留空则只保存 Markdown 草案。')
+			.addText((text) =>
+				text
+					.setPlaceholder(DEFAULT_SETTINGS.calendarShortcutName)
+					.setValue(this.plugin.settings.calendarShortcutName)
+					.onChange(async (value) => {
+						this.plugin.settings.calendarShortcutName = value.trim();
 						await this.plugin.saveSettings();
 					}),
 			);
@@ -102,7 +137,11 @@ export class HaidencyrilSettingTab extends PluginSettingTab {
 	private addFolderSetting(
 		name: string,
 		description: string,
-		key: 'inboxFolder' | 'analysisFolder' | 'projectsFolder',
+		key:
+			| 'inboxFolder'
+			| 'analysisFolder'
+			| 'projectsFolder'
+			| 'scheduleFolder',
 	): void {
 		new Setting(this.containerEl)
 			.setName(name)
