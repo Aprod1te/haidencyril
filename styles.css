@@ -1210,6 +1210,35 @@
 }
 
 @media (max-width: 720px) {
+	.haidencyril-capture-modal {
+		padding-bottom: max(12px, env(safe-area-inset-bottom));
+	}
+
+	.haidencyril-capture-modal .haidencyril-capture-input {
+		height: 156px;
+		min-height: 156px;
+		max-height: 26vh;
+		margin: 12px 0 8px;
+		resize: none;
+	}
+
+	.haidencyril-capture-modal .haidencyril-mobile-save-action {
+		margin: 12px 0 0;
+		padding: 0;
+		border: 0;
+	}
+
+	.haidencyril-capture-modal
+		.haidencyril-mobile-save-action
+		.setting-item-control,
+	.haidencyril-capture-modal .haidencyril-mobile-save-action button {
+		width: 100%;
+	}
+
+	.haidencyril-capture-modal .haidencyril-mobile-save-action button {
+		min-height: 46px;
+	}
+
 	.haidencyril-workspace {
 		padding: 12px 12px calc(34px + env(safe-area-inset-bottom));
 	}

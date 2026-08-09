@@ -33,23 +33,38 @@ export class CaptureModal extends Modal {
 			text: '先把它留下，不需要现在分类或整理。',
 			cls: 'haidencyril-muted',
 		});
+		if (Platform.isMobileApp) {
+			new Setting(contentEl)
+				.setClass('haidencyril-modal-actions')
+				.setClass('haidencyril-mobile-save-action')
+				.addButton((button) =>
+					button
+						.setButtonText('保存碎片')
+						.setCta()
+						.onClick(() => {
+							void this.submit(false, button);
+						}),
+				);
+		}
 
 		this.input = new TextAreaComponent(contentEl)
 			.setPlaceholder('一个想法、现场发现的问题、别人模糊的反馈……');
-		this.input.inputEl.rows = 10;
+		this.input.inputEl.rows = Platform.isMobileApp ? 6 : 10;
 		this.input.inputEl.addClass('haidencyril-capture-input');
 		this.input.inputEl.focus();
 
-		const actions = new Setting(contentEl).setClass('haidencyril-modal-actions');
-		actions.addButton((button) =>
-			button.setButtonText('取消').onClick(() => this.close()),
-		);
-		actions.addButton((button) =>
-			button.setButtonText(Platform.isMobileApp ? '保存' : '仅保存').onClick(() => {
-				void this.submit(false, button);
-			}),
-		);
 		if (!Platform.isMobileApp) {
+			const actions = new Setting(contentEl).setClass(
+				'haidencyril-modal-actions',
+			);
+			actions.addButton((button) =>
+				button.setButtonText('取消').onClick(() => this.close()),
+			);
+			actions.addButton((button) =>
+				button.setButtonText('仅保存').onClick(() => {
+					void this.submit(false, button);
+				}),
+			);
 			actions.addButton((button) => {
 				button
 					.setButtonText('保存并分析')
