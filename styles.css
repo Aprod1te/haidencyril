@@ -141,17 +141,12 @@
 }
 
 .haidencyril-mobile-navigation {
-	position: sticky;
-	top: 0;
-	z-index: 5;
 	display: grid;
 	grid-auto-flow: column;
 	grid-auto-columns: minmax(72px, 1fr);
 	gap: 7px;
 	margin: -7px 0 24px;
-	padding: 8px 0;
-	background: color-mix(in srgb, var(--background-primary) 92%, transparent);
-	backdrop-filter: blur(12px);
+	padding: 4px 0;
 }
 
 .haidencyril-mobile-navigation button {
@@ -165,7 +160,7 @@
 }
 
 [data-haidencyril-section] {
-	scroll-margin-top: 60px;
+	scroll-margin-top: 18px;
 }
 
 .haidencyril-secondary-button {
@@ -1206,6 +1201,19 @@
 		padding: 12px 12px calc(34px + env(safe-area-inset-bottom));
 	}
 
+	.haidencyril-mobile-workspace {
+		box-sizing: border-box;
+		width: 100%;
+		max-width: 100%;
+		min-height: 100%;
+		padding:
+			calc(60px + env(safe-area-inset-top))
+			max(12px, env(safe-area-inset-right))
+			calc(118px + env(safe-area-inset-bottom))
+			max(12px, env(safe-area-inset-left));
+		overflow-x: clip;
+	}
+
 	.haidencyril-header {
 		align-items: stretch;
 		flex-direction: column;
@@ -1356,6 +1364,26 @@
 		font-size: 21px;
 	}
 
+	.haidencyril-mobile-workspace .haidencyril-mobile-header {
+		padding: 18px;
+		border-radius: 18px;
+	}
+
+	.haidencyril-mobile-workspace .haidencyril-mobile-navigation {
+		width: 100%;
+		margin: 0 0 22px;
+		overflow-x: auto;
+		scrollbar-width: none;
+	}
+
+	.haidencyril-mobile-workspace .haidencyril-mobile-navigation::-webkit-scrollbar {
+		display: none;
+	}
+
+	.haidencyril-mobile-workspace .haidencyril-mobile-navigation button {
+		min-height: 42px;
+	}
+
 	.haidencyril-mobile-workspace .haidencyril-task-board-card {
 		gap: 10px;
 		padding: 14px;
@@ -1368,7 +1396,7 @@
 	}
 
 	.haidencyril-mobile-workspace .haidencyril-task-board-actions button {
-		min-height: 38px;
+		min-height: 42px;
 	}
 
 	.haidencyril-mobile-workspace .haidencyril-fragment-card {
@@ -1383,7 +1411,7 @@
 	}
 
 	.haidencyril-mobile-workspace .haidencyril-card-actions button {
-		min-height: 38px;
+		min-height: 42px;
 	}
 
 	.haidencyril-mobile-workspace .haidencyril-project-actions {
