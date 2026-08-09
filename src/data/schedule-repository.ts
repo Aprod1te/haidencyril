@@ -101,7 +101,7 @@ ${rows.length > 0 ? rows.join('\n') : '- 未来八天没有日程。'}
 	}
 
 	async createScheduleDraft(
-		projectFile: TFile,
+		sourceFile: TFile,
 		proposal: ScheduleProposal,
 	): Promise<TFile> {
 		const folder = normalizePath(`${this.getSettings().scheduleFolder}/Drafts`);
@@ -109,8 +109,8 @@ ${rows.length > 0 ? rows.join('\n') : '- 未来八天没有日程。'}
 		const timestamp = new Date().toISOString().replace(/[:.]/gu, '-');
 		const safeTitle = this.sanitizeFilename(proposal.title);
 		const path = normalizePath(`${folder}/${safeTitle} - ${timestamp}.md`);
-		const projectLink = this.app.fileManager.generateMarkdownLink(
-			projectFile,
+		const sourceLink = this.app.fileManager.generateMarkdownLink(
+			sourceFile,
 			path,
 		);
 		const conflicts =
@@ -129,7 +129,7 @@ haidencyril_created: ${JSON.stringify(new Date().toISOString())}
 
 # ${proposal.title}
 
-项目：${projectLink}
+来源：${sourceLink}
 
 开始：${proposal.start.toISOString()}
 
@@ -142,8 +142,8 @@ haidencyril_created: ${JSON.stringify(new Date().toISOString())}
 ${conflicts}
 `,
 		);
-		const link = this.app.fileManager.generateMarkdownLink(file, projectFile.path);
-		await this.app.vault.process(projectFile, (content) =>
+		const link = this.app.fileManager.generateMarkdownLink(file, sourceFile.path);
+		await this.app.vault.process(sourceFile, (content) =>
 			this.insertUnderHeading(
 				content,
 				'日程安排',

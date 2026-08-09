@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { taskStepSchema } from './task-plan';
 
 export const confidenceSchema = z.enum(['low', 'medium', 'high']);
 
@@ -29,6 +30,7 @@ export const analysisSchema = z.object({
 	),
 	unknowns: z.array(z.string().min(1)),
 	questions: z.array(z.string().min(1)).max(3),
+	nextActions: z.array(taskStepSchema).max(8),
 	reflectionComparison: z.object({
 		aligned: z.array(z.string().min(1)),
 		challenges: z.array(z.string().min(1)),
@@ -99,6 +101,9 @@ export function renderAnalysisMarkdown(
 			`- **${item.statement}**（置信度：${CONFIDENCE_LABELS[item.confidence]}）\n  - 依据：${item.evidence}`,
 	);
 	const questions = analysis.questions.map((question) => `- [ ] ${question}`);
+	const nextActions = analysis.nextActions.map(
+		(item) => `- [ ] ${item.action}\n  - 完成标准：${item.doneWhen}`,
+	);
 	const unknowns = analysis.unknowns.map((unknown) => `- ${unknown}`);
 	const aligned = analysis.reflectionComparison.aligned.map((item) => `- ${item}`);
 	const challenges = analysis.reflectionComparison.challenges.map(
@@ -151,6 +156,10 @@ ${bulletList(unknowns, '暂时没有额外未知项。')}
 ## 需要你思考
 
 ${bulletList(questions, '当前不需要补充问题。')}
+
+## 可执行任务清单
+
+${bulletList(nextActions, '这条记录目前不需要转成行动。')}
 
 ## 与你的判断对照
 

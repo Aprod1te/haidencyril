@@ -356,6 +356,93 @@
 	display: none;
 }
 
+.haidencyril-task-planning-shell {
+	width: min(820px, calc(100vw - 32px));
+	max-width: calc(100vw - 32px);
+	height: auto;
+	max-height: none;
+}
+
+.haidencyril-task-planning-shell .modal-content {
+	height: auto;
+	max-height: none;
+	overflow: visible;
+}
+
+.haidencyril-task-planning-modal {
+	box-sizing: border-box;
+	width: 100%;
+	min-width: 0;
+}
+
+.haidencyril-task-plan {
+	margin-top: 20px;
+}
+
+.haidencyril-task-form.is-hidden {
+	display: none;
+}
+
+.haidencyril-task-revise {
+	display: block;
+	margin: 0 0 12px auto;
+}
+
+.haidencyril-task-questions {
+	margin-bottom: 18px;
+	padding: 13px 15px;
+	border: 1px solid var(--background-modifier-border);
+	border-radius: 12px;
+	background: var(--background-secondary);
+}
+
+.haidencyril-task-questions p {
+	margin: 6px 0 0;
+	color: var(--text-muted);
+}
+
+.haidencyril-task-list {
+	display: grid;
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+	gap: 8px;
+}
+
+.haidencyril-task-row {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 14px;
+	padding: 12px 14px;
+	border: 1px solid var(--background-modifier-border);
+	border-radius: 12px;
+}
+
+.haidencyril-task-row > div {
+	display: grid;
+	flex: 1 1 auto;
+	gap: 7px;
+	min-width: 0;
+}
+
+.haidencyril-task-row input {
+	width: 100%;
+}
+
+.haidencyril-task-row strong,
+.haidencyril-task-row p {
+	overflow-wrap: anywhere;
+}
+
+.haidencyril-task-row p {
+	margin: 4px 0 0;
+	color: var(--text-muted);
+	font-size: var(--font-ui-smaller);
+}
+
+.haidencyril-task-row button {
+	flex: 0 0 auto;
+}
+
 .haidencyril-search-controls {
 	display: flex;
 	align-items: center;
@@ -940,7 +1027,8 @@
 	}
 
 	.haidencyril-agenda-days,
-	.haidencyril-agenda-suggestions {
+	.haidencyril-agenda-suggestions,
+	.haidencyril-task-list {
 		grid-template-columns: minmax(0, 1fr);
 	}
 

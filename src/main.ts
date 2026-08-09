@@ -9,6 +9,7 @@ import {
 	type HaidencyrilSettings,
 } from './settings';
 import { OllamaAnalysisService } from './services/ollama-analysis-service';
+import { TaskPlanningService } from './services/task-planning-service';
 import { SemanticSearchService } from './services/semantic-search-service';
 import { IcsCourseImportService } from './services/ics-course-import-service';
 import { ScheduleRepository } from './data/schedule-repository';
@@ -35,8 +36,10 @@ import { ProjectReviewModal } from './ui/project-review-modal';
 import { SemanticSearchModal } from './ui/semantic-search-modal';
 import { CourseImportModal } from './ui/course-import-modal';
 import { ScheduleModal } from './ui/schedule-modal';
+import { TaskPlanningModal } from './ui/task-planning-modal';
 import { AgendaModal, type AgendaSuggestion } from './ui/agenda-modal';
 import type { CalendarBlock } from './domain/schedule';
+import type { TaskListItem } from './domain/task-plan';
 import {
 	HAIDENCYRIL_VIEW_TYPE,
 	HaidencyrilWorkspaceView,
@@ -46,6 +49,7 @@ export default class HaidencyrilPlugin extends Plugin {
 	settings!: HaidencyrilSettings;
 	repository!: FragmentRepository;
 	private analysisService!: OllamaAnalysisService;
+	private taskPlanningService!: TaskPlanningService;
 	private semanticSearchService!: SemanticSearchService;
 	private courseImportService!: IcsCourseImportService;
 	private scheduleRepository!: ScheduleRepository;
@@ -55,6 +59,7 @@ export default class HaidencyrilPlugin extends Plugin {
 		this.repository = new FragmentRepository(this.app, () => this.settings);
 		await this.repository.removeLegacyPathMetadata();
 		this.analysisService = new OllamaAnalysisService();
+		this.taskPlanningService = new TaskPlanningService();
 		this.semanticSearchService = new SemanticSearchService(
 			this.app,
 			this.repository,
@@ -96,6 +101,20 @@ export default class HaidencyrilPlugin extends Plugin {
 			id: 'open-agenda-suggestions',
 			name: '查看日程建议',
 			callback: () => void this.openAgendaModal(),
+		});
+		this.addCommand({
+			id: 'schedule-current-note',
+			name: '将当前笔记整理成任务并安排',
+			checkCallback: (checking) => {
+				const file = this.app.workspace.getActiveFile();
+				if (!this.isSchedulableFile(file)) {
+					return false;
+				}
+				if (!checking) {
+					void this.scheduleCurrentNote(file);
+				}
+				return true;
+			},
 		});
 		this.addCommand({
 			id: 'copy-shortcut-capture-url',
@@ -141,6 +160,19 @@ export default class HaidencyrilPlugin extends Plugin {
 		this.registerEvent(
 			this.app.vault.on('delete', () => {
 				void this.refreshWorkspace();
+			}),
+		);
+		this.registerEvent(
+			this.app.workspace.on('file-menu', (menu, file) => {
+				if (!(file instanceof TFile) || !this.isSchedulableFile(file)) {
+					return;
+				}
+				menu.addItem((item) =>
+					item
+						.setTitle('整理成任务并安排')
+						.setIcon('calendar-plus')
+						.onClick(() => void this.scheduleCurrentNote(file)),
+				);
 			}),
 		);
 	}
@@ -304,6 +336,102 @@ export default class HaidencyrilPlugin extends Plugin {
 		).open();
 	}
 
+	private async scheduleCurrentNote(file: TFile): Promise<void> {
+		const content = await this.app.vault.cachedRead(file);
+		const initialGoal = await this.taskFromNote(file);
+		new TaskPlanningModal(
+			this.app,
+			initialGoal,
+			this.taskStepsFromMarkdown(content),
+			(goal, constraints) => {
+				if (!this.settings.aiEnabled) {
+					throw new Error('请先在 Haidencyril 设置中启用本地 AI 分析');
+				}
+				return this.taskPlanningService.plan(
+					file,
+					content,
+					goal,
+					constraints,
+					this.settings.model,
+				);
+			},
+			(tasks) => this.saveTaskPlan(file, tasks),
+			async (task, tasks) => {
+				await this.saveTaskPlan(file, tasks);
+				this.openScheduleModal(file, task.action);
+			},
+		).open();
+	}
+
+	private taskStepsFromMarkdown(content: string): TaskListItem[] {
+		const section = content.match(
+			/^## 可执行任务清单\s*\n([\s\S]*?)(?=^##\s|^---\s*$|(?![\s\S]))/mu,
+		)?.[1];
+		if (!section) {
+			return [];
+		}
+		const lines = section.split('\n');
+		const tasks: TaskListItem[] = [];
+		for (let index = 0; index < lines.length; index += 1) {
+			const match = lines[index]?.match(/^- \[([ xX])\]\s+(.+)$/u);
+			const action = match?.[2]?.trim();
+			if (!action) {
+				continue;
+			}
+			const doneWhen = lines[index + 1]
+				?.match(/^\s+- 完成标准：(.+)$/u)?.[1]
+				?.trim();
+			if (doneWhen) {
+				tasks.push({
+					action,
+					doneWhen,
+					completed: match?.[1]?.toLowerCase() === 'x',
+				});
+			}
+		}
+		return tasks;
+	}
+
+	private async saveTaskPlan(file: TFile, tasks: TaskListItem[]): Promise<void> {
+		const body = tasks
+			.map(
+				(task) =>
+					`- [${task.completed ? 'x' : ' '}] ${task.action}\n  - 完成标准：${task.doneWhen}`,
+			)
+			.join('\n');
+		await this.app.vault.process(file, (content) => {
+			const section = `## 可执行任务清单\n\n${body}`;
+			const pattern = /^## 可执行任务清单\s*\n[\s\S]*?(?=^##\s|^---\s*$|(?![\s\S]))/mu;
+			if (pattern.test(content)) {
+				return content.replace(pattern, `${section}\n\n`);
+			}
+			return `${content.trimEnd()}\n\n${section}\n`;
+		});
+		new Notice('任务清单已保存到当前笔记');
+	}
+
+	private async taskFromNote(file: TFile): Promise<string> {
+		const content = await this.app.vault.cachedRead(file);
+		const source = content.match(/原始碎片：\[\[([^\]]+)\]\]/u)?.[1];
+		if (source) {
+			return source.split('/').at(-1) ?? file.basename;
+		}
+		const heading = content.match(/^#\s+(.+)$/mu)?.[1]?.trim();
+		return heading || file.basename;
+	}
+
+	private isSchedulableFile(file: TFile | null): file is TFile {
+		if (!(file instanceof TFile) || file.extension !== 'md') {
+			return false;
+		}
+		const frontmatter: Record<string, unknown> | undefined =
+			this.app.metadataCache.getFileCache(file)?.frontmatter;
+		const type = frontmatter?.['haidencyril_type'];
+		return !['calendar_snapshot', 'course_import', 'schedule_draft'].includes(
+			type as string,
+		);
+	}
+
 	async analyzeFragment(file: TFile, reflection: UserReflection): Promise<TFile> {
 		if (!this.settings.aiEnabled) {
 			throw new Error('请先在 Haidencyril 设置中启用本地 AI 分析');
@@ -401,10 +529,10 @@ export default class HaidencyrilPlugin extends Plugin {
 	}
 
 	private async confirmSchedule(
-		projectFile: TFile,
+		sourceFile: TFile,
 		proposal: ScheduleProposal,
 	): Promise<void> {
-		await this.scheduleRepository.createScheduleDraft(projectFile, proposal);
+		await this.scheduleRepository.createScheduleDraft(sourceFile, proposal);
 		await this.refreshWorkspace();
 		const shortcutName = this.settings.calendarShortcutName.trim();
 		if (!shortcutName) {
@@ -415,7 +543,7 @@ export default class HaidencyrilPlugin extends Plugin {
 			title: proposal.title,
 			start: proposal.start.toISOString(),
 			end: proposal.end.toISOString(),
-			notes: `来自 Haidencyril 项目：${projectFile.basename}`,
+			notes: `来自 Haidencyril：${sourceFile.basename}`,
 		});
 		const url = `shortcuts://run-shortcut?name=${encodeURIComponent(shortcutName)}&input=text&text=${encodeURIComponent(payload)}`;
 		window.open(url);

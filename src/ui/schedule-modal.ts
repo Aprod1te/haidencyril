@@ -34,7 +34,7 @@ export class ScheduleModal extends Modal {
 
 	onOpen(): void {
 		this.contentEl.addClass('haidencyril-schedule-modal');
-		this.contentEl.createEl('h2', { text: '安排下一步行动' });
+		this.contentEl.createEl('h2', { text: '安排日程提醒' });
 		this.contentEl.createEl('p', {
 			text: '课程优先受到保护。所有日期、冲突和写入内容都会在这里确认。',
 			cls: 'haidencyril-muted',
