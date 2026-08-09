@@ -1,4 +1,4 @@
-import { Notice, Plugin, TFile } from 'obsidian';
+import { Notice, Platform, Plugin, TFile } from 'obsidian';
 import {
 	FragmentRepository,
 	type ProjectDraft,
@@ -247,7 +247,7 @@ export default class HaidencyrilPlugin extends Plugin {
 	openCaptureModal(): void {
 		new CaptureModal(
 			this.app,
-			this.settings.aiEnabled,
+			this.settings.aiEnabled && !Platform.isMobileApp,
 			(submission) => this.handleCapture(submission),
 		).open();
 	}

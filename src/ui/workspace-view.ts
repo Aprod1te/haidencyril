@@ -1,7 +1,9 @@
 import {
 	DropdownComponent,
 	ItemView,
+	Platform,
 	SearchComponent,
+	setIcon,
 	TFile,
 	WorkspaceLeaf,
 } from 'obsidian';
@@ -69,43 +71,13 @@ export class HaidencyrilWorkspaceView extends ItemView {
 		}
 		root.empty();
 		root.addClass('haidencyril-workspace');
+		root.toggleClass('haidencyril-mobile-workspace', Platform.isMobile);
 
-		const header = root.createDiv({ cls: 'haidencyril-header' });
-		const heading = header.createDiv();
-		heading.createSpan({
-			text: '个人知识工作台',
-			cls: 'haidencyril-eyebrow',
-		});
-		heading.createEl('h1', { text: 'Haidencyril' });
-		heading.createEl('p', {
-			text: '从碎片出发，逐渐形成理解与行动。',
-			cls: 'haidencyril-muted',
-		});
-		const actions = header.createDiv({ cls: 'haidencyril-header-actions' });
-		const refreshButton = actions.createEl('button', {
-			text: '刷新',
-			cls: 'haidencyril-secondary-button',
-		});
-		refreshButton.addEventListener('click', () => void this.refresh());
-		const semanticButton = actions.createEl('button', {
-			text: '语义搜索',
-			cls: 'haidencyril-secondary-button',
-		});
-		semanticButton.addEventListener('click', () =>
-			this.plugin.openSemanticSearchModal(),
-		);
-		const agendaButton = actions.createEl('button', {
-			text: '日程建议',
-			cls: 'haidencyril-secondary-button',
-		});
-		agendaButton.addEventListener('click', () =>
-			void this.plugin.openAgendaModal(),
-		);
-		const captureButton = actions.createEl('button', {
-			text: '＋ 记录碎片',
-			cls: 'mod-cta',
-		});
-		captureButton.addEventListener('click', () => this.plugin.openCaptureModal());
+		if (Platform.isMobile) {
+			this.renderMobileHeader(root);
+		} else {
+			this.renderDesktopHeader(root);
+		}
 
 		const files = this.plugin.repository.getInboxFiles();
 		const [analysisHistory, projects, agendaBlocks, tasks, themes] = await Promise.all([
@@ -165,6 +137,9 @@ export class HaidencyrilWorkspaceView extends ItemView {
 			'推进中 / 已完成',
 			`${activeProjects.length} / ${completedProjects.length}`,
 		);
+		if (Platform.isMobile) {
+			this.renderMobileNavigation(root, activeProjects.length > 0);
+		}
 		this.renderToday(root, agendaBlocks);
 		this.renderTasks(root, tasks);
 
@@ -179,6 +154,7 @@ export class HaidencyrilWorkspaceView extends ItemView {
 		}
 
 		const sectionHeader = root.createDiv({ cls: 'haidencyril-section-header' });
+		sectionHeader.dataset.haidencyrilSection = 'inbox';
 		sectionHeader.createEl('h2', { text: '收件箱' });
 		const resultCount = sectionHeader.createSpan();
 
@@ -244,11 +220,109 @@ export class HaidencyrilWorkspaceView extends ItemView {
 		renderResults();
 	}
 
+	private renderDesktopHeader(container: HTMLElement): void {
+		const header = container.createDiv({ cls: 'haidencyril-header' });
+		const heading = header.createDiv();
+		heading.createSpan({
+			text: '个人知识工作台',
+			cls: 'haidencyril-eyebrow',
+		});
+		heading.createEl('h1', { text: 'Haidencyril' });
+		heading.createEl('p', {
+			text: '从碎片出发，逐渐形成理解与行动。',
+			cls: 'haidencyril-muted',
+		});
+		const actions = header.createDiv({ cls: 'haidencyril-header-actions' });
+		const refreshButton = actions.createEl('button', {
+			text: '刷新',
+			cls: 'haidencyril-secondary-button',
+		});
+		refreshButton.addEventListener('click', () => void this.refresh());
+		const semanticButton = actions.createEl('button', {
+			text: '语义搜索',
+			cls: 'haidencyril-secondary-button',
+		});
+		semanticButton.addEventListener('click', () =>
+			this.plugin.openSemanticSearchModal(),
+		);
+		const agendaButton = actions.createEl('button', {
+			text: '日程建议',
+			cls: 'haidencyril-secondary-button',
+		});
+		agendaButton.addEventListener('click', () =>
+			void this.plugin.openAgendaModal(),
+		);
+		const captureButton = actions.createEl('button', {
+			text: '＋ 记录碎片',
+			cls: 'mod-cta',
+		});
+		captureButton.addEventListener('click', () => this.plugin.openCaptureModal());
+	}
+
+	private renderMobileHeader(container: HTMLElement): void {
+		const header = container.createDiv({ cls: 'haidencyril-mobile-header' });
+		const top = header.createDiv({ cls: 'haidencyril-mobile-header-top' });
+		const heading = top.createDiv();
+		heading.createSpan({ text: '随身工作台', cls: 'haidencyril-eyebrow' });
+		heading.createEl('h1', { text: '今天' });
+		heading.createEl('p', {
+			text: new Intl.DateTimeFormat('zh-CN', {
+				month: 'long',
+				day: 'numeric',
+				weekday: 'long',
+			}).format(new Date()),
+			cls: 'haidencyril-muted',
+		});
+		const refresh = top.createEl('button', {
+			cls: 'haidencyril-mobile-icon-button',
+			attr: { 'aria-label': '刷新工作台' },
+		});
+		setIcon(refresh, 'refresh-cw');
+		refresh.addEventListener('click', () => void this.refresh());
+
+		const capture = header.createEl('button', {
+			cls: 'haidencyril-mobile-capture mod-cta',
+		});
+		setIcon(capture, 'plus');
+		capture.createSpan({ text: '记录一个碎片' });
+		capture.addEventListener('click', () => this.plugin.openCaptureModal());
+
+		const hint = header.createDiv({ cls: 'haidencyril-mobile-hint' });
+		setIcon(hint.createSpan(), 'smartphone');
+		hint.createSpan({ text: '手机先记录与执行，深度分析回到 Mac 完成。' });
+	}
+
+	private renderMobileNavigation(
+		container: HTMLElement,
+		hasProjects: boolean,
+	): void {
+		const navigation = container.createDiv({
+			cls: 'haidencyril-mobile-navigation',
+		});
+		const destinations = [
+			{ label: '今天', section: 'today' },
+			{ label: '任务', section: 'tasks' },
+			...(hasProjects ? [{ label: '项目', section: 'projects' }] : []),
+			{ label: '碎片', section: 'inbox' },
+		];
+		for (const destination of destinations) {
+			const button = navigation.createEl('button', { text: destination.label });
+			button.addEventListener('click', () => {
+				container
+					.querySelector<HTMLElement>(
+						`[data-haidencyril-section="${destination.section}"]`,
+					)
+					?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+			});
+		}
+	}
+
 	private renderTasks(container: HTMLElement, tasks: VaultTask[]): void {
 		const openTasks = tasks.filter((task) => !task.completed);
 		const header = container.createDiv({
 			cls: 'haidencyril-section-header haidencyril-task-board-header',
 		});
+		header.dataset.haidencyrilSection = 'tasks';
 		header.createEl('h2', { text: '待办任务' });
 		header.createSpan({ text: `${openTasks.length} 项未完成` });
 		const list = container.createDiv({ cls: 'haidencyril-task-board-list' });
@@ -305,6 +379,7 @@ export class HaidencyrilWorkspaceView extends ItemView {
 		const header = container.createDiv({
 			cls: 'haidencyril-section-header haidencyril-today-header',
 		});
+		header.dataset.haidencyrilSection = 'today';
 		header.createEl('h2', { text: '今天' });
 		const open = header.createEl('button', {
 			text: '查看日程建议',
@@ -410,13 +485,15 @@ export class HaidencyrilWorkspaceView extends ItemView {
 				);
 			});
 		}
-		const analyzeButton = actions.createEl('button', {
-			text: status === 'analyzed' ? '重新分析' : '共同分析',
-			cls: 'haidencyril-card-button haidencyril-card-button-primary',
-		});
-		analyzeButton.addEventListener('click', () => {
-			this.plugin.openReflectionModal(file);
-		});
+		if (!Platform.isMobileApp) {
+			const analyzeButton = actions.createEl('button', {
+				text: status === 'analyzed' ? '重新分析' : '共同分析',
+				cls: 'haidencyril-card-button haidencyril-card-button-primary',
+			});
+			analyzeButton.addEventListener('click', () => {
+				this.plugin.openReflectionModal(file);
+			});
+		}
 	}
 
 	private renderProjects(
@@ -426,6 +503,7 @@ export class HaidencyrilWorkspaceView extends ItemView {
 		const header = container.createDiv({
 			cls: 'haidencyril-section-header haidencyril-projects-header',
 		});
+		header.dataset.haidencyrilSection = 'projects';
 		header.createEl('h2', { text: '正在推进' });
 		header.createSpan({ text: `${projects.length} 个项目` });
 		const list = container.createDiv({ cls: 'haidencyril-project-list' });

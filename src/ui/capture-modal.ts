@@ -3,6 +3,7 @@ import {
 	ButtonComponent,
 	Modal,
 	Notice,
+	Platform,
 	Setting,
 	TextAreaComponent,
 } from 'obsidian';
@@ -44,25 +45,29 @@ export class CaptureModal extends Modal {
 			button.setButtonText('取消').onClick(() => this.close()),
 		);
 		actions.addButton((button) =>
-			button.setButtonText('仅保存').onClick(() => {
+			button.setButtonText(Platform.isMobileApp ? '保存' : '仅保存').onClick(() => {
 				void this.submit(false, button);
 			}),
 		);
-		actions.addButton((button) => {
-			button
-				.setButtonText('保存并分析')
-				.setCta()
-				.setDisabled(!this.aiAvailable)
-				.onClick(() => {
-					void this.submit(true, button);
-				});
-			if (!this.aiAvailable) {
-				button.setTooltip('请先在设置中启用本地 AI');
-			}
-		});
+		if (!Platform.isMobileApp) {
+			actions.addButton((button) => {
+				button
+					.setButtonText('保存并分析')
+					.setCta()
+					.setDisabled(!this.aiAvailable)
+					.onClick(() => {
+						void this.submit(true, button);
+					});
+				if (!this.aiAvailable) {
+					button.setTooltip('请先在设置中启用本地 AI');
+				}
+			});
+		}
 
 		contentEl.createEl('p', {
-			text: '“保存并分析”只会把本碎片和最多 4 条候选笔记交给这台电脑上的本地模型。',
+			text: Platform.isMobileApp
+				? '保存后会通过 iCloud 同步到 Mac，再进入待分析队列。'
+				: '“保存并分析”只会把本碎片和最多 4 条候选笔记交给这台电脑上的本地模型。',
 			cls: 'haidencyril-privacy-note',
 		});
 	}

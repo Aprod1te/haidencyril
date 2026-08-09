@@ -65,6 +65,109 @@
 	border-radius: 11px;
 }
 
+.haidencyril-mobile-header {
+	position: relative;
+	margin-bottom: 16px;
+	padding: 20px;
+	border: 1px solid var(--haidencyril-border);
+	border-radius: 22px;
+	background:
+		radial-gradient(circle at 100% 0%, var(--haidencyril-accent-soft), transparent 48%),
+		var(--background-primary-alt);
+	overflow: hidden;
+}
+
+.haidencyril-mobile-header-top {
+	display: flex;
+	align-items: flex-start;
+	justify-content: space-between;
+	gap: 16px;
+}
+
+.haidencyril-mobile-header h1 {
+	margin: 0 0 4px;
+	font-size: 34px;
+	line-height: 1.05;
+	letter-spacing: -0.045em;
+}
+
+.haidencyril-mobile-icon-button {
+	display: inline-grid;
+	place-items: center;
+	flex: 0 0 auto;
+	width: 42px;
+	height: 42px;
+	padding: 0;
+	border-radius: 50%;
+	background: var(--background-modifier-hover);
+}
+
+.haidencyril-mobile-icon-button svg {
+	width: 18px;
+	height: 18px;
+}
+
+.haidencyril-mobile-capture {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	gap: 9px;
+	width: 100%;
+	min-height: 48px;
+	margin-top: 18px;
+	border-radius: 14px;
+	font-size: var(--font-ui-medium);
+	font-weight: var(--font-semibold);
+}
+
+.haidencyril-mobile-capture svg {
+	width: 19px;
+	height: 19px;
+}
+
+.haidencyril-mobile-hint {
+	display: flex;
+	align-items: center;
+	gap: 7px;
+	margin-top: 12px;
+	color: var(--text-muted);
+	font-size: var(--font-ui-smaller);
+	line-height: 1.45;
+}
+
+.haidencyril-mobile-hint svg {
+	width: 15px;
+	height: 15px;
+}
+
+.haidencyril-mobile-navigation {
+	position: sticky;
+	top: 0;
+	z-index: 5;
+	display: grid;
+	grid-auto-flow: column;
+	grid-auto-columns: minmax(72px, 1fr);
+	gap: 7px;
+	margin: -7px 0 24px;
+	padding: 8px 0;
+	background: color-mix(in srgb, var(--background-primary) 92%, transparent);
+	backdrop-filter: blur(12px);
+}
+
+.haidencyril-mobile-navigation button {
+	min-height: 36px;
+	padding: 4px 10px;
+	border: 1px solid var(--haidencyril-border);
+	border-radius: 999px;
+	box-shadow: none;
+	background: var(--background-primary-alt);
+	font-size: var(--font-ui-smaller);
+}
+
+[data-haidencyril-section] {
+	scroll-margin-top: 60px;
+}
+
 .haidencyril-secondary-button {
 	background: color-mix(in srgb, var(--background-modifier-hover) 72%, transparent);
 }
@@ -1100,7 +1203,7 @@
 
 @media (max-width: 720px) {
 	.haidencyril-workspace {
-		padding: 14px 12px 32px;
+		padding: 12px 12px calc(34px + env(safe-area-inset-bottom));
 	}
 
 	.haidencyril-header {
@@ -1212,6 +1315,84 @@
 
 	.haidencyril-card-actions,
 	.haidencyril-card-actions button {
+		width: 100%;
+	}
+
+	.haidencyril-mobile-workspace .haidencyril-overview {
+		display: flex;
+		gap: 8px;
+		margin-bottom: 18px;
+		border: 0;
+		border-radius: 0;
+		background: transparent;
+		overflow-x: auto;
+		scrollbar-width: none;
+	}
+
+	.haidencyril-mobile-workspace .haidencyril-overview::-webkit-scrollbar {
+		display: none;
+	}
+
+	.haidencyril-mobile-workspace .haidencyril-metric {
+		flex: 0 0 116px;
+		padding: 13px 14px;
+		border: 1px solid var(--haidencyril-border);
+		border-radius: 14px;
+		background: var(--haidencyril-surface);
+	}
+
+	.haidencyril-mobile-workspace .haidencyril-metric + .haidencyril-metric,
+	.haidencyril-mobile-workspace .haidencyril-metric:nth-child(3),
+	.haidencyril-mobile-workspace .haidencyril-metric:nth-child(4) {
+		border: 1px solid var(--haidencyril-border);
+	}
+
+	.haidencyril-mobile-workspace .haidencyril-section-header {
+		align-items: center;
+		margin-top: 5px;
+	}
+
+	.haidencyril-mobile-workspace .haidencyril-section-header h2 {
+		font-size: 21px;
+	}
+
+	.haidencyril-mobile-workspace .haidencyril-task-board-card {
+		gap: 10px;
+		padding: 14px;
+	}
+
+	.haidencyril-mobile-workspace .haidencyril-task-board-actions {
+		display: grid;
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+		width: 100%;
+	}
+
+	.haidencyril-mobile-workspace .haidencyril-task-board-actions button {
+		min-height: 38px;
+	}
+
+	.haidencyril-mobile-workspace .haidencyril-fragment-card {
+		padding: 15px;
+		border-radius: 15px;
+	}
+
+	.haidencyril-mobile-workspace .haidencyril-card-actions {
+		display: grid;
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+		gap: 7px;
+	}
+
+	.haidencyril-mobile-workspace .haidencyril-card-actions button {
+		min-height: 38px;
+	}
+
+	.haidencyril-mobile-workspace .haidencyril-project-actions {
+		display: grid;
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+	}
+
+	.haidencyril-mobile-workspace .haidencyril-project-actions,
+	.haidencyril-mobile-workspace .haidencyril-project-actions button {
 		width: 100%;
 	}
 }
