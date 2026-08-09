@@ -75,6 +75,7 @@ export class HaidencyrilWorkspaceView extends ItemView {
 
 		if (Platform.isMobile) {
 			this.renderMobileHeader(root);
+			this.renderMobileFloatingActions(root);
 		} else {
 			this.renderDesktopHeader(root);
 		}
@@ -315,6 +316,26 @@ export class HaidencyrilWorkspaceView extends ItemView {
 					?.scrollIntoView({ behavior: 'smooth', block: 'start' });
 			});
 		}
+	}
+
+	private renderMobileFloatingActions(container: HTMLElement): void {
+		const actions = container.createDiv({
+			cls: 'haidencyril-mobile-floating-actions',
+		});
+		const top = actions.createEl('button', {
+			cls: 'haidencyril-mobile-floating-button',
+			attr: { 'aria-label': '回到工作台顶部' },
+		});
+		setIcon(top, 'arrow-up');
+		top.addEventListener('click', () => {
+			container.scrollIntoView({ behavior: 'smooth', block: 'start' });
+		});
+		const capture = actions.createEl('button', {
+			cls: 'haidencyril-mobile-floating-button haidencyril-mobile-floating-primary',
+			attr: { 'aria-label': '记录一个碎片' },
+		});
+		setIcon(capture, 'plus');
+		capture.addEventListener('click', () => this.plugin.openCaptureModal());
 	}
 
 	private renderTasks(container: HTMLElement, tasks: VaultTask[]): void {
