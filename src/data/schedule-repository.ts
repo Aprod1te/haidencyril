@@ -1,5 +1,5 @@
 import { App, normalizePath, TFile, TFolder } from 'obsidian';
-import type { CalendarBlock, ScheduleProposal } from '../domain/schedule';
+import type { ActionProposal, CalendarBlock } from '../domain/schedule';
 import type { HaidencyrilSettings } from '../settings';
 
 const EVENT_MARKER = '<!-- haidencyril_event ';
@@ -100,11 +100,15 @@ ${rows.length > 0 ? rows.join('\n') : '- 未来八天没有日程。'}
 		);
 	}
 
-	async createScheduleDraft(
+	async createActionDraft(
 		sourceFile: TFile,
-		proposal: ScheduleProposal,
+		proposal: ActionProposal,
 	): Promise<TFile> {
-		const folder = normalizePath(`${this.getSettings().scheduleFolder}/Drafts`);
+		const subfolder =
+			proposal.destination === 'reminder' ? 'Reminders' : 'Drafts';
+		const folder = normalizePath(
+			`${this.getSettings().scheduleFolder}/${subfolder}`,
+		);
 		await this.ensureFolder(folder);
 		const timestamp = new Date().toISOString().replace(/[:.]/gu, '-');
 		const safeTitle = this.sanitizeFilename(proposal.title);
@@ -113,6 +117,32 @@ ${rows.length > 0 ? rows.join('\n') : '- 未来八天没有日程。'}
 			sourceFile,
 			path,
 		);
+		if (proposal.destination === 'reminder') {
+			const file = await this.app.vault.create(
+				path,
+				`---
+haidencyril_type: reminder_draft
+haidencyril_status: confirmed
+haidencyril_created: ${JSON.stringify(new Date().toISOString())}
+---
+
+# ${proposal.title}
+
+来源：${sourceLink}
+
+提醒时间：${proposal.due.toISOString()}
+`,
+			);
+			const link = this.app.fileManager.generateMarkdownLink(file, sourceFile.path);
+			await this.app.vault.process(sourceFile, (content) =>
+				this.insertUnderHeading(
+					content,
+					'提醒事项',
+					`- ${link} · ${this.formatDate(proposal.due)}`,
+				),
+			);
+			return file;
+		}
 		const conflicts =
 			proposal.conflicts.length > 0
 				? proposal.conflicts
@@ -265,6 +295,15 @@ ${conflicts}
 			minute: '2-digit',
 		});
 		return `${formatter.format(new Date(block.start))}–${timeFormatter.format(new Date(block.end))}`;
+	}
+
+	private formatDate(value: Date): string {
+		return new Intl.DateTimeFormat('zh-CN', {
+			month: 'numeric',
+			day: 'numeric',
+			hour: '2-digit',
+			minute: '2-digit',
+		}).format(value);
 	}
 
 	private async ensureFolder(folderPath: string): Promise<void> {

@@ -8,6 +8,9 @@ import {
 	TextComponent,
 } from 'obsidian';
 import type {
+	ActionProposal,
+	ReminderProposal,
+	ScheduleDestination,
 	ScheduleProposal,
 	ScheduleRequest,
 	TaskPriority,
@@ -18,6 +21,10 @@ export class ScheduleModal extends Modal {
 	private deadlineInput!: TextComponent;
 	private durationMinutes = 60;
 	private priority: TaskPriority = 'normal';
+	private destination: ScheduleDestination = 'calendar';
+	private durationSetting!: Setting;
+	private prioritySetting!: Setting;
+	private deadlineSetting!: Setting;
 	private proposalEl!: HTMLElement;
 	private working = false;
 
@@ -27,7 +34,7 @@ export class ScheduleModal extends Modal {
 		private readonly onGenerate: (
 			request: ScheduleRequest,
 		) => Promise<ScheduleProposal | null>,
-		private readonly onConfirm: (proposal: ScheduleProposal) => Promise<void>,
+		private readonly onConfirm: (proposal: ActionProposal) => Promise<void>,
 	) {
 		super(app);
 	}
@@ -43,6 +50,19 @@ export class ScheduleModal extends Modal {
 			this.taskInput = text.setValue(this.initialTask);
 		});
 		new Setting(this.contentEl)
+			.setName('安排方式')
+			.setDesc('占用时间的行动放进日历；只需到点提醒的事项放进提醒事项。')
+			.addDropdown((dropdown: DropdownComponent) =>
+				dropdown
+					.addOption('calendar', '日历时间块')
+					.addOption('reminder', '提醒事项')
+					.setValue('calendar')
+					.onChange((value) => {
+						this.destination = value === 'reminder' ? 'reminder' : 'calendar';
+						this.updateDestinationFields();
+					}),
+			);
+		this.durationSetting = new Setting(this.contentEl)
 			.setName('预计用时')
 			.addDropdown((dropdown: DropdownComponent) =>
 				dropdown
@@ -55,7 +75,7 @@ export class ScheduleModal extends Modal {
 						this.durationMinutes = Number(value);
 					}),
 			);
-		new Setting(this.contentEl)
+		this.prioritySetting = new Setting(this.contentEl)
 			.setName('优先级')
 			.setDesc('高优先级只有在找不到空闲时间时才会提出占用课程。')
 			.addDropdown((dropdown: DropdownComponent) =>
@@ -67,7 +87,7 @@ export class ScheduleModal extends Modal {
 						this.priority = value === 'high' ? 'high' : 'normal';
 					}),
 			);
-		new Setting(this.contentEl)
+		this.deadlineSetting = new Setting(this.contentEl)
 			.setName('最晚完成时间')
 			.setDesc('这是安排边界，不会被静默保存为截止日期。')
 			.addText((text) => {
@@ -90,6 +110,7 @@ export class ScheduleModal extends Modal {
 		this.proposalEl = this.contentEl.createDiv({
 			cls: 'haidencyril-schedule-proposal',
 		});
+		this.updateDestinationFields();
 	}
 
 	onClose(): void {
@@ -113,12 +134,15 @@ export class ScheduleModal extends Modal {
 		this.working = true;
 		button.setDisabled(true);
 		try {
-			const proposal = await this.onGenerate({
-				title,
-				durationMinutes: this.durationMinutes,
-				deadline,
-				priority: this.priority,
-			});
+			const proposal: ActionProposal | null =
+				this.destination === 'reminder'
+					? ({ destination: 'reminder', title, due: deadline } satisfies ReminderProposal)
+					: await this.onGenerate({
+							title,
+							durationMinutes: this.durationMinutes,
+							deadline,
+							priority: this.priority,
+						});
 			this.renderProposal(proposal);
 		} catch (error) {
 			new Notice(error instanceof Error ? error.message : '生成日程草案失败');
@@ -128,7 +152,7 @@ export class ScheduleModal extends Modal {
 		}
 	}
 
-	private renderProposal(proposal: ScheduleProposal | null): void {
+	private renderProposal(proposal: ActionProposal | null): void {
 		this.proposalEl.empty();
 		if (!proposal) {
 			this.proposalEl.createEl('p', {
@@ -145,6 +169,22 @@ export class ScheduleModal extends Modal {
 			hour: '2-digit',
 			minute: '2-digit',
 		});
+		if (proposal.destination === 'reminder') {
+			this.proposalEl.createEl('p', {
+				text: `提醒时间：${formatter.format(proposal.due)}`,
+				cls: 'haidencyril-schedule-time',
+			});
+			const reminderSetting = new Setting(this.proposalEl).setClass(
+				'haidencyril-modal-actions',
+			);
+			reminderSetting.addButton((button) =>
+				button
+					.setButtonText('确认并交给提醒事项')
+					.setCta()
+					.onClick(() => void this.confirm(proposal, button)),
+			);
+			return;
+		}
 		this.proposalEl.createEl('p', {
 			text: `${formatter.format(proposal.start)} → ${formatter.format(proposal.end)}`,
 			cls: 'haidencyril-schedule-time',
@@ -177,7 +217,7 @@ export class ScheduleModal extends Modal {
 	}
 
 	private async confirm(
-		proposal: ScheduleProposal,
+		proposal: ActionProposal,
 		button: ButtonComponent,
 	): Promise<void> {
 		if (this.working) {
@@ -193,6 +233,19 @@ export class ScheduleModal extends Modal {
 			this.working = false;
 			button.setDisabled(false);
 		}
+	}
+
+	private updateDestinationFields(): void {
+		const isReminder = this.destination === 'reminder';
+		this.durationSetting.settingEl.toggleClass('is-hidden', isReminder);
+		this.prioritySetting.settingEl.toggleClass('is-hidden', isReminder);
+		this.deadlineSetting
+			.setName(isReminder ? '提醒时间' : '最晚完成时间')
+			.setDesc(
+				isReminder
+					? '确认后创建提醒事项，不占用日历时间。'
+					: '这是安排边界，不会被静默保存为截止日期。',
+			);
 	}
 
 	private defaultDeadline(): string {

@@ -11,6 +11,7 @@ import type {
 	ReviewableConnection,
 } from '../data/fragment-repository';
 import type { CalendarBlock } from '../domain/schedule';
+import type { VaultTask } from '../data/task-repository';
 
 export const HAIDENCYRIL_VIEW_TYPE = 'haidencyril-workspace';
 
@@ -106,10 +107,11 @@ export class HaidencyrilWorkspaceView extends ItemView {
 		captureButton.addEventListener('click', () => this.plugin.openCaptureModal());
 
 		const files = this.plugin.repository.getInboxFiles();
-		const [analysisHistory, projects, agendaBlocks] = await Promise.all([
+		const [analysisHistory, projects, agendaBlocks, tasks] = await Promise.all([
 			this.plugin.repository.getAnalysisHistory(),
 			this.plugin.repository.getProjects(),
 			this.plugin.getAgendaBlocks(),
+			this.plugin.getTasks(),
 		]);
 		const entries = await Promise.all(
 			files.map(async (file): Promise<FragmentEntry> => {
@@ -162,6 +164,7 @@ export class HaidencyrilWorkspaceView extends ItemView {
 			`${activeProjects.length} / ${completedProjects.length}`,
 		);
 		this.renderToday(root, agendaBlocks);
+		this.renderTasks(root, tasks);
 
 		if (activeProjects.length > 0) {
 			this.renderProjects(root, activeProjects);
@@ -234,6 +237,59 @@ export class HaidencyrilWorkspaceView extends ItemView {
 			renderResults();
 		});
 		renderResults();
+	}
+
+	private renderTasks(container: HTMLElement, tasks: VaultTask[]): void {
+		const openTasks = tasks.filter((task) => !task.completed);
+		const header = container.createDiv({
+			cls: 'haidencyril-section-header haidencyril-task-board-header',
+		});
+		header.createEl('h2', { text: '待办任务' });
+		header.createSpan({ text: `${openTasks.length} 项未完成` });
+		const list = container.createDiv({ cls: 'haidencyril-task-board-list' });
+		if (openTasks.length === 0) {
+			list.createEl('p', {
+				text: '还没有可执行任务。可以从任意笔记整理任务清单。',
+				cls: 'haidencyril-today-empty',
+			});
+			return;
+		}
+		for (const task of openTasks) {
+			const card = list.createDiv({ cls: 'haidencyril-task-board-card' });
+			const checkbox = card.createEl('input');
+			checkbox.type = 'checkbox';
+			checkbox.ariaLabel = `完成：${task.action}`;
+			checkbox.addEventListener('change', () => {
+				checkbox.checked = false;
+				this.plugin.openTaskCompletionModal(task);
+			});
+			const content = card.createDiv({ cls: 'haidencyril-task-board-content' });
+			content.createEl('strong', { text: task.action });
+			if (task.doneWhen) {
+				content.createEl('p', { text: `完成标准：${task.doneWhen}` });
+			}
+			content.createSpan({
+				text: this.taskSourceTitle(task.file),
+				cls: 'haidencyril-task-board-source',
+			});
+			const actions = card.createDiv({ cls: 'haidencyril-task-board-actions' });
+			const schedule = actions.createEl('button', {
+				text: '安排',
+				cls: 'haidencyril-card-button',
+			});
+			schedule.addEventListener('click', () =>
+				this.plugin.openScheduleModal(task.file, task.action),
+			);
+			const open = actions.createEl('button', {
+				text: '打开',
+				cls: 'haidencyril-card-button',
+			});
+			open.addEventListener('click', () => void this.openFile(task.file));
+		}
+	}
+
+	private taskSourceTitle(file: TFile): string {
+		return file.basename.replace(/ - \d{4}-\d{2}-\d{2}T.*$/u, '');
 	}
 
 	private renderToday(container: HTMLElement, blocks: CalendarBlock[]): void {

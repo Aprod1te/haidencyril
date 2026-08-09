@@ -14,7 +14,13 @@ import { SemanticSearchService } from './services/semantic-search-service';
 import { IcsCourseImportService } from './services/ics-course-import-service';
 import { ScheduleRepository } from './data/schedule-repository';
 import {
+	TaskRepository,
+	type TaskCompletionReflection,
+	type VaultTask,
+} from './data/task-repository';
+import {
 	findScheduleProposal,
+	type ActionProposal,
 	type ScheduleProposal,
 	type ScheduleRequest,
 } from './domain/schedule';
@@ -37,6 +43,7 @@ import { SemanticSearchModal } from './ui/semantic-search-modal';
 import { CourseImportModal } from './ui/course-import-modal';
 import { ScheduleModal } from './ui/schedule-modal';
 import { TaskPlanningModal } from './ui/task-planning-modal';
+import { TaskCompletionModal } from './ui/task-completion-modal';
 import { AgendaModal, type AgendaSuggestion } from './ui/agenda-modal';
 import type { CalendarBlock } from './domain/schedule';
 import type { TaskListItem } from './domain/task-plan';
@@ -53,6 +60,7 @@ export default class HaidencyrilPlugin extends Plugin {
 	private semanticSearchService!: SemanticSearchService;
 	private courseImportService!: IcsCourseImportService;
 	private scheduleRepository!: ScheduleRepository;
+	private taskRepository!: TaskRepository;
 
 	async onload(): Promise<void> {
 		await this.loadSettings();
@@ -69,6 +77,7 @@ export default class HaidencyrilPlugin extends Plugin {
 			this.app,
 			() => this.settings,
 		);
+		this.taskRepository = new TaskRepository(this.app, () => this.settings);
 
 		this.registerView(
 			HAIDENCYRIL_VIEW_TYPE,
@@ -342,7 +351,7 @@ export default class HaidencyrilPlugin extends Plugin {
 		new TaskPlanningModal(
 			this.app,
 			initialGoal,
-			this.taskStepsFromMarkdown(content),
+			await this.taskRepository.readTaskPlan(file),
 			(goal, constraints) => {
 				if (!this.settings.aiEnabled) {
 					throw new Error('请先在 Haidencyril 设置中启用本地 AI 分析');
@@ -352,7 +361,7 @@ export default class HaidencyrilPlugin extends Plugin {
 					content,
 					goal,
 					constraints,
-					this.settings.model,
+					this.settings.taskPlanningModel,
 				);
 			},
 			(tasks) => this.saveTaskPlan(file, tasks),
@@ -363,51 +372,28 @@ export default class HaidencyrilPlugin extends Plugin {
 		).open();
 	}
 
-	private taskStepsFromMarkdown(content: string): TaskListItem[] {
-		const section = content.match(
-			/^## 可执行任务清单\s*\n([\s\S]*?)(?=^##\s|^---\s*$|(?![\s\S]))/mu,
-		)?.[1];
-		if (!section) {
-			return [];
-		}
-		const lines = section.split('\n');
-		const tasks: TaskListItem[] = [];
-		for (let index = 0; index < lines.length; index += 1) {
-			const match = lines[index]?.match(/^- \[([ xX])\]\s+(.+)$/u);
-			const action = match?.[2]?.trim();
-			if (!action) {
-				continue;
-			}
-			const doneWhen = lines[index + 1]
-				?.match(/^\s+- 完成标准：(.+)$/u)?.[1]
-				?.trim();
-			if (doneWhen) {
-				tasks.push({
-					action,
-					doneWhen,
-					completed: match?.[1]?.toLowerCase() === 'x',
-				});
-			}
-		}
-		return tasks;
+	private async saveTaskPlan(file: TFile, tasks: TaskListItem[]): Promise<void> {
+		await this.taskRepository.saveTaskPlan(file, tasks);
+		new Notice('任务清单已保存到当前笔记');
 	}
 
-	private async saveTaskPlan(file: TFile, tasks: TaskListItem[]): Promise<void> {
-		const body = tasks
-			.map(
-				(task) =>
-					`- [${task.completed ? 'x' : ' '}] ${task.action}\n  - 完成标准：${task.doneWhen}`,
-			)
-			.join('\n');
-		await this.app.vault.process(file, (content) => {
-			const section = `## 可执行任务清单\n\n${body}`;
-			const pattern = /^## 可执行任务清单\s*\n[\s\S]*?(?=^##\s|^---\s*$|(?![\s\S]))/mu;
-			if (pattern.test(content)) {
-				return content.replace(pattern, `${section}\n\n`);
-			}
-			return `${content.trimEnd()}\n\n${section}\n`;
-		});
-		new Notice('任务清单已保存到当前笔记');
+	async getTasks(): Promise<VaultTask[]> {
+		return this.taskRepository.getTasks();
+	}
+
+	openTaskCompletionModal(task: VaultTask): void {
+		new TaskCompletionModal(this.app, task, (reflection) =>
+			this.completeTask(task, reflection),
+		).open();
+	}
+
+	private async completeTask(
+		task: VaultTask,
+		reflection: TaskCompletionReflection,
+	): Promise<void> {
+		await this.taskRepository.completeWithReflection(task, reflection);
+		await this.refreshWorkspace();
+		new Notice('任务已完成，执行记录已保留');
 	}
 
 	private async taskFromNote(file: TFile): Promise<string> {
@@ -427,9 +413,12 @@ export default class HaidencyrilPlugin extends Plugin {
 		const frontmatter: Record<string, unknown> | undefined =
 			this.app.metadataCache.getFileCache(file)?.frontmatter;
 		const type = frontmatter?.['haidencyril_type'];
-		return !['calendar_snapshot', 'course_import', 'schedule_draft'].includes(
-			type as string,
-		);
+		return ![
+			'calendar_snapshot',
+			'course_import',
+			'schedule_draft',
+			'reminder_draft',
+		].includes(type as string);
 	}
 
 	async analyzeFragment(file: TFile, reflection: UserReflection): Promise<TFile> {
@@ -530,10 +519,24 @@ export default class HaidencyrilPlugin extends Plugin {
 
 	private async confirmSchedule(
 		sourceFile: TFile,
-		proposal: ScheduleProposal,
+		proposal: ActionProposal,
 	): Promise<void> {
-		await this.scheduleRepository.createScheduleDraft(sourceFile, proposal);
+		await this.scheduleRepository.createActionDraft(sourceFile, proposal);
 		await this.refreshWorkspace();
+		if (proposal.destination === 'reminder') {
+			const shortcutName = this.settings.reminderShortcutName.trim();
+			if (!shortcutName) {
+				new Notice('提醒记录已保存；未配置苹果提醒事项快捷指令');
+				return;
+			}
+			const payload = JSON.stringify({
+				title: proposal.title,
+				due: this.formatShortcutDate(proposal.due),
+			});
+			this.runShortcut(shortcutName, payload);
+			new Notice('提醒记录已保存，并已交给苹果提醒事项快捷指令');
+			return;
+		}
 		const shortcutName = this.settings.calendarShortcutName.trim();
 		if (!shortcutName) {
 			new Notice('日程草案已保存；未配置苹果日历快捷指令');
@@ -541,13 +544,22 @@ export default class HaidencyrilPlugin extends Plugin {
 		}
 		const payload = JSON.stringify({
 			title: proposal.title,
-			start: proposal.start.toISOString(),
-			end: proposal.end.toISOString(),
+			start: this.formatShortcutDate(proposal.start),
+			end: this.formatShortcutDate(proposal.end),
 			notes: `来自 Haidencyril：${sourceFile.basename}`,
 		});
-		const url = `shortcuts://run-shortcut?name=${encodeURIComponent(shortcutName)}&input=text&text=${encodeURIComponent(payload)}`;
-		window.open(url);
+		this.runShortcut(shortcutName, payload);
 		new Notice('日程草案已保存，并已交给苹果快捷指令');
+	}
+
+	private runShortcut(name: string, payload: string): void {
+		const url = `shortcuts://run-shortcut?name=${encodeURIComponent(name)}&input=text&text=${encodeURIComponent(payload)}`;
+		window.open(url);
+	}
+
+	private formatShortcutDate(value: Date): string {
+		const pad = (part: number): string => part.toString().padStart(2, '0');
+		return `${value.getFullYear()}-${pad(value.getMonth() + 1)}-${pad(value.getDate())} ${pad(value.getHours())}:${pad(value.getMinutes())}`;
 	}
 
 	private async handleProtocolCapture(

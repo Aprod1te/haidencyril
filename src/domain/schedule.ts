@@ -7,6 +7,7 @@ export interface CalendarBlock {
 }
 
 export type TaskPriority = 'normal' | 'high';
+export type ScheduleDestination = 'calendar' | 'reminder';
 
 export interface ScheduleRequest {
 	title: string;
@@ -16,12 +17,21 @@ export interface ScheduleRequest {
 }
 
 export interface ScheduleProposal {
+	destination: 'calendar';
 	title: string;
 	start: Date;
 	end: Date;
 	priority: TaskPriority;
 	conflicts: CalendarBlock[];
 }
+
+export interface ReminderProposal {
+	destination: 'reminder';
+	title: string;
+	due: Date;
+}
+
+export type ActionProposal = ScheduleProposal | ReminderProposal;
 
 export function findScheduleProposal(
 	request: ScheduleRequest,
@@ -42,6 +52,7 @@ export function findScheduleProposal(
 		const conflicts = overlappingBlocks(cursor, end, busyBlocks);
 		if (conflicts.length === 0) {
 			return {
+				destination: 'calendar',
 				title: request.title,
 				start: new Date(cursor),
 				end,
@@ -64,6 +75,7 @@ export function findScheduleProposal(
 		}
 		const end = new Date(cursor.getTime() + durationMs);
 		return {
+			destination: 'calendar',
 			title: request.title,
 			start: new Date(cursor),
 			end,

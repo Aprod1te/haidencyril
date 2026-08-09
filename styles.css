@@ -443,6 +443,65 @@
 	flex: 0 0 auto;
 }
 
+.haidencyril-task-board-header {
+	margin-top: 4px;
+}
+
+.haidencyril-task-board-list {
+	display: grid;
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+	gap: 10px;
+	margin-bottom: 30px;
+}
+
+.haidencyril-task-board-card {
+	display: grid;
+	grid-template-columns: auto minmax(0, 1fr) auto;
+	align-items: start;
+	gap: 12px;
+	min-width: 0;
+	padding: 15px 16px;
+	border: 1px solid var(--haidencyril-border);
+	border-radius: 14px;
+	background: var(--background-primary-alt);
+}
+
+.haidencyril-task-board-card > input {
+	margin-top: 3px;
+}
+
+.haidencyril-task-board-content {
+	min-width: 0;
+}
+
+.haidencyril-task-board-content strong {
+	display: block;
+	line-height: 1.45;
+	overflow-wrap: anywhere;
+}
+
+.haidencyril-task-board-content p {
+	margin: 6px 0 0;
+	color: var(--text-muted);
+	font-size: var(--font-ui-smaller);
+	line-height: 1.45;
+}
+
+.haidencyril-task-board-source {
+	display: block;
+	margin-top: 8px;
+	color: var(--text-faint);
+	font-size: var(--font-ui-smaller);
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.haidencyril-task-board-actions {
+	display: flex;
+	gap: 6px;
+}
+
 .haidencyril-search-controls {
 	display: flex;
 	align-items: center;
@@ -739,6 +798,10 @@
 	max-width: 720px;
 }
 
+.haidencyril-schedule-modal .setting-item.is-hidden {
+	display: none;
+}
+
 .haidencyril-hidden-input {
 	display: none;
 }
@@ -1028,8 +1091,17 @@
 
 	.haidencyril-agenda-days,
 	.haidencyril-agenda-suggestions,
-	.haidencyril-task-list {
+	.haidencyril-task-list,
+	.haidencyril-task-board-list {
 		grid-template-columns: minmax(0, 1fr);
+	}
+
+	.haidencyril-task-board-card {
+		grid-template-columns: auto minmax(0, 1fr);
+	}
+
+	.haidencyril-task-board-actions {
+		grid-column: 2;
 	}
 
 	.haidencyril-agenda-actions,

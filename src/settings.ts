@@ -13,8 +13,10 @@ export interface HaidencyrilSettings {
 	scheduleFolder: string;
 	aiEnabled: boolean;
 	model: string;
+	taskPlanningModel: string;
 	embeddingModel: string;
 	calendarShortcutName: string;
+	reminderShortcutName: string;
 	calendarSyncShortcutName: string;
 	openAnalysisAfterGeneration: boolean;
 }
@@ -26,8 +28,10 @@ export const DEFAULT_SETTINGS: HaidencyrilSettings = {
 	scheduleFolder: 'Haidencyril/Schedule',
 	aiEnabled: true,
 	model: 'qwen3.5:9b',
+	taskPlanningModel: 'qwen3.5:4b',
 	embeddingModel: 'qwen3-embedding:0.6b',
 	calendarShortcutName: 'Haidencyril 日程',
+	reminderShortcutName: 'Haidencyril 提醒',
 	calendarSyncShortcutName: 'Haidencyril 同步日程',
 	openAnalysisAfterGeneration: true,
 };
@@ -74,13 +78,27 @@ export class HaidencyrilSettingTab extends PluginSettingTab {
 
 		new Setting(containerEl)
 			.setName('本地模型')
-			.setDesc('Ollama 模型名称。当前设备推荐 qwen3.5:9b。')
+			.setDesc('用于深度分析，当前设备推荐 qwen3.5:9b。')
 			.addText((text) =>
 				text
 					.setPlaceholder(DEFAULT_SETTINGS.model)
 					.setValue(this.plugin.settings.model)
 					.onChange(async (value) => {
 						this.plugin.settings.model = value.trim() || DEFAULT_SETTINGS.model;
+						await this.plugin.saveSettings();
+					}),
+			);
+
+		new Setting(containerEl)
+			.setName('任务拆解模型')
+			.setDesc('用于快速生成执行清单；当前设备推荐 qwen3.5:4b。')
+			.addText((text) =>
+				text
+					.setPlaceholder(DEFAULT_SETTINGS.taskPlanningModel)
+					.setValue(this.plugin.settings.taskPlanningModel)
+					.onChange(async (value) => {
+						this.plugin.settings.taskPlanningModel =
+							value.trim() || DEFAULT_SETTINGS.taskPlanningModel;
 						await this.plugin.saveSettings();
 					}),
 			);
@@ -109,6 +127,19 @@ export class HaidencyrilSettingTab extends PluginSettingTab {
 					.setValue(this.plugin.settings.calendarShortcutName)
 					.onChange(async (value) => {
 						this.plugin.settings.calendarShortcutName = value.trim();
+						await this.plugin.saveSettings();
+					}),
+			);
+
+		new Setting(containerEl)
+			.setName('提醒事项快捷指令名称')
+			.setDesc('确认提醒后调用，所有苹果设备使用同一条快捷指令。')
+			.addText((text) =>
+				text
+					.setPlaceholder(DEFAULT_SETTINGS.reminderShortcutName)
+					.setValue(this.plugin.settings.reminderShortcutName)
+					.onChange(async (value) => {
+						this.plugin.settings.reminderShortcutName = value.trim();
 						await this.plugin.saveSettings();
 					}),
 			);
