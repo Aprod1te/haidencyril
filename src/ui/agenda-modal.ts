@@ -159,6 +159,9 @@ export class AgendaModal extends Modal {
 		if (kind === 'scheduled-work') {
 			return '已确认行动';
 		}
+		if (kind === 'temporary') {
+			return '临时固定';
+		}
 		return '日历';
 	}
 }

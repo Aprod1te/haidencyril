@@ -1,5 +1,9 @@
 import { App, normalizePath, TFile, TFolder } from 'obsidian';
-import type { ActionProposal, CalendarBlock } from '../domain/schedule';
+import type {
+	ActionProposal,
+	CalendarBlock,
+	TemporaryBlockDraft,
+} from '../domain/schedule';
 import type { HaidencyrilSettings } from '../settings';
 
 const EVENT_MARKER = '<!-- haidencyril_event ';
@@ -50,8 +54,65 @@ ${rows.join('\n')}
 		return this.deduplicate([
 			...(await this.getLatestCourses()),
 			...(await this.getLatestCalendarSnapshot()),
+			...(await this.getTemporaryBlocks()),
 			...(await this.getScheduledWork()),
 		]);
+	}
+
+	async createTemporaryBlock(
+		sourceFile: TFile,
+		draft: TemporaryBlockDraft,
+	): Promise<TFile> {
+		const folder = normalizePath(
+			`${this.getSettings().scheduleFolder}/Temporary`,
+		);
+		await this.ensureFolder(folder);
+		const timestamp = new Date().toISOString().replace(/[:.]/gu, '-');
+		const path = normalizePath(
+			`${folder}/${this.sanitizeFilename(draft.title)} - ${timestamp}.md`,
+		);
+		const sourceLink = this.app.fileManager.generateMarkdownLink(
+			sourceFile,
+			path,
+		);
+		const block: CalendarBlock = {
+			title: draft.title,
+			start: draft.start.toISOString(),
+			end: draft.end.toISOString(),
+			location: draft.location,
+			kind: 'temporary',
+		};
+		const file = await this.app.vault.create(
+			path,
+			`---
+haidencyril_type: temporary_block
+haidencyril_status: confirmed
+haidencyril_created: ${JSON.stringify(new Date().toISOString())}
+---
+
+# ${draft.title}
+
+来源：${sourceLink}
+
+时间：${this.formatRange(block)}
+
+地点：${draft.location || '未填写'}
+
+> [!info] 保护规则
+> 这是经你确认的临时固定安排。日程建议会默认避开这段时间。
+
+${EVENT_MARKER}${JSON.stringify(block)} -->
+`,
+		);
+		const link = this.app.fileManager.generateMarkdownLink(file, sourceFile.path);
+		await this.app.vault.process(sourceFile, (content) =>
+			this.insertUnderHeading(
+				content,
+				'固定安排',
+				`- ${link} · ${this.formatRange(block)}`,
+			),
+		);
+		return file;
 	}
 
 	async getAgendaBlocks(): Promise<CalendarBlock[]> {
@@ -203,6 +264,23 @@ ${conflicts}
 			return [];
 		}
 		return this.parseEventMarkers(await this.app.vault.cachedRead(latest));
+	}
+
+	private async getTemporaryBlocks(): Promise<CalendarBlock[]> {
+		const folder = normalizePath(
+			`${this.getSettings().scheduleFolder}/Temporary`,
+		);
+		const prefix = `${folder}/`;
+		const files = this.app.vault
+			.getMarkdownFiles()
+			.filter((file) => file.path.startsWith(prefix));
+		return (
+			await Promise.all(
+				files.map(async (file) =>
+					this.parseEventMarkers(await this.app.vault.cachedRead(file)),
+				),
+			)
+		).flat();
 	}
 
 	private latestFile(subfolder: string): TFile | null {

@@ -21,8 +21,10 @@ import {
 import {
 	findScheduleProposal,
 	type ActionProposal,
+	type CalendarBlock,
 	type ScheduleProposal,
 	type ScheduleRequest,
+	type TemporaryBlockDraft,
 } from './domain/schedule';
 import { CaptureModal, type CaptureSubmission } from './ui/capture-modal';
 import type { UserReflection } from './domain/analysis';
@@ -44,8 +46,8 @@ import { CourseImportModal } from './ui/course-import-modal';
 import { ScheduleModal } from './ui/schedule-modal';
 import { TaskPlanningModal } from './ui/task-planning-modal';
 import { TaskCompletionModal } from './ui/task-completion-modal';
+import { TemporaryBlockModal } from './ui/temporary-block-modal';
 import { AgendaModal, type AgendaSuggestion } from './ui/agenda-modal';
-import type { CalendarBlock } from './domain/schedule';
 import type { TaskListItem } from './domain/task-plan';
 import {
 	HAIDENCYRIL_VIEW_TYPE,
@@ -105,6 +107,20 @@ export default class HaidencyrilPlugin extends Plugin {
 			id: 'import-course-calendar',
 			name: '导入 .ics 固定日程',
 			callback: () => this.openCourseImportModal(),
+		});
+		this.addCommand({
+			id: 'protect-current-note-time',
+			name: '将当前笔记设为临时固定安排',
+			checkCallback: (checking) => {
+				const file = this.app.workspace.getActiveFile();
+				if (!this.isSchedulableFile(file)) {
+					return false;
+				}
+				if (!checking) {
+					void this.openTemporaryBlockModal(file);
+				}
+				return true;
+			},
 		});
 		this.addCommand({
 			id: 'open-agenda-suggestions',
@@ -181,6 +197,12 @@ export default class HaidencyrilPlugin extends Plugin {
 						.setTitle('整理成任务并安排')
 						.setIcon('calendar-plus')
 						.onClick(() => void this.scheduleCurrentNote(file)),
+				);
+				menu.addItem((item) =>
+					item
+						.setTitle('设为临时固定安排')
+						.setIcon('shield-check')
+						.onClick(() => void this.openTemporaryBlockModal(file)),
 				);
 			}),
 		);
@@ -345,6 +367,23 @@ export default class HaidencyrilPlugin extends Plugin {
 		).open();
 	}
 
+	private async openTemporaryBlockModal(file: TFile): Promise<void> {
+		new TemporaryBlockModal(
+			this.app,
+			await this.taskFromNote(file),
+			(draft) => this.saveTemporaryBlock(file, draft),
+		).open();
+	}
+
+	private async saveTemporaryBlock(
+		file: TFile,
+		draft: TemporaryBlockDraft,
+	): Promise<void> {
+		await this.scheduleRepository.createTemporaryBlock(file, draft);
+		await this.refreshWorkspace();
+		new Notice('已保存为受保护的临时固定安排');
+	}
+
 	private async scheduleCurrentNote(file: TFile): Promise<void> {
 		const content = await this.app.vault.cachedRead(file);
 		const initialGoal = await this.taskFromNote(file);
@@ -418,6 +457,7 @@ export default class HaidencyrilPlugin extends Plugin {
 			'course_import',
 			'schedule_draft',
 			'reminder_draft',
+			'temporary_block',
 		].includes(type as string);
 	}
 

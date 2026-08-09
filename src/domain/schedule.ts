@@ -3,7 +3,14 @@ export interface CalendarBlock {
 	start: string;
 	end: string;
 	location: string;
-	kind: 'course' | 'fixed' | 'scheduled-work';
+	kind: 'course' | 'fixed' | 'temporary' | 'scheduled-work';
+}
+
+export interface TemporaryBlockDraft {
+	title: string;
+	start: Date;
+	end: Date;
+	location: string;
 }
 
 export type TaskPriority = 'normal' | 'high';
