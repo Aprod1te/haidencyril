@@ -659,6 +659,60 @@
 	overflow: hidden;
 }
 
+.haidencyril-completed-actions {
+	display: flex;
+	justify-content: flex-end;
+	margin-top: 11px;
+}
+
+.haidencyril-themes-header {
+	margin-top: 2px;
+}
+
+.haidencyril-theme-list {
+	display: grid;
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+	gap: 10px;
+	margin-bottom: 30px;
+}
+
+.haidencyril-theme-card {
+	min-width: 0;
+	padding: 16px 17px;
+	border: 1px solid var(--haidencyril-border);
+	border-radius: 15px;
+	background:
+		linear-gradient(150deg, var(--haidencyril-accent-soft), transparent 62%),
+		var(--background-primary-alt);
+}
+
+.haidencyril-theme-card-top {
+	display: flex;
+	align-items: flex-start;
+	justify-content: space-between;
+	gap: 12px;
+}
+
+.haidencyril-theme-card p {
+	display: -webkit-box;
+	margin: 9px 0 10px;
+	color: var(--text-muted);
+	font-size: var(--font-ui-small);
+	line-height: 1.5;
+	-webkit-line-clamp: 3;
+	-webkit-box-orient: vertical;
+	overflow: hidden;
+}
+
+.haidencyril-theme-card small {
+	display: block;
+	color: var(--text-faint);
+	line-height: 1.45;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
 .haidencyril-fragment-card {
 	min-width: 0;
 	padding: 17px 18px 15px;
@@ -1112,6 +1166,10 @@
 	}
 
 	.haidencyril-completed-list {
+		grid-template-columns: minmax(0, 1fr);
+	}
+
+	.haidencyril-theme-list {
 		grid-template-columns: minmax(0, 1fr);
 	}
 

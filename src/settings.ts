@@ -10,6 +10,7 @@ export interface HaidencyrilSettings {
 	inboxFolder: string;
 	analysisFolder: string;
 	projectsFolder: string;
+	themesFolder: string;
 	scheduleFolder: string;
 	aiEnabled: boolean;
 	model: string;
@@ -25,6 +26,7 @@ export const DEFAULT_SETTINGS: HaidencyrilSettings = {
 	inboxFolder: 'Haidencyril/Inbox',
 	analysisFolder: 'Haidencyril/Analysis',
 	projectsFolder: 'Haidencyril/Projects',
+	themesFolder: 'Haidencyril/Themes',
 	scheduleFolder: 'Haidencyril/Schedule',
 	aiEnabled: true,
 	model: 'qwen3.5:9b',
@@ -61,6 +63,7 @@ export class HaidencyrilSettingTab extends PluginSettingTab {
 			'analysisFolder',
 		);
 		this.addFolderSetting('项目', '由碎片逐渐形成的项目。', 'projectsFolder');
+		this.addFolderSetting('长期主题', '由项目复盘逐次沉淀的主题时间线。', 'themesFolder');
 		this.addFolderSetting('日程', '日历快照、课表和已确认的行动。', 'scheduleFolder');
 
 		new Setting(containerEl).setName('AI 分析').setHeading();
@@ -187,6 +190,7 @@ export class HaidencyrilSettingTab extends PluginSettingTab {
 			| 'inboxFolder'
 			| 'analysisFolder'
 			| 'projectsFolder'
+			| 'themesFolder'
 			| 'scheduleFolder',
 	): void {
 		new Setting(this.containerEl)

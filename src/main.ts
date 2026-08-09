@@ -14,6 +14,11 @@ import { SemanticSearchService } from './services/semantic-search-service';
 import { IcsCourseImportService } from './services/ics-course-import-service';
 import { ScheduleRepository } from './data/schedule-repository';
 import {
+	ThemeRepository,
+	type ThemeEvolutionDraft,
+	type ThemeSummary,
+} from './data/theme-repository';
+import {
 	TaskRepository,
 	type TaskCompletionReflection,
 	type VaultTask,
@@ -47,6 +52,7 @@ import { ScheduleModal } from './ui/schedule-modal';
 import { TaskPlanningModal } from './ui/task-planning-modal';
 import { TaskCompletionModal } from './ui/task-completion-modal';
 import { TemporaryBlockModal } from './ui/temporary-block-modal';
+import { ThemeEvolutionModal } from './ui/theme-evolution-modal';
 import { AgendaModal, type AgendaSuggestion } from './ui/agenda-modal';
 import type { TaskListItem } from './domain/task-plan';
 import {
@@ -63,6 +69,7 @@ export default class HaidencyrilPlugin extends Plugin {
 	private courseImportService!: IcsCourseImportService;
 	private scheduleRepository!: ScheduleRepository;
 	private taskRepository!: TaskRepository;
+	private themeRepository!: ThemeRepository;
 
 	async onload(): Promise<void> {
 		await this.loadSettings();
@@ -80,6 +87,7 @@ export default class HaidencyrilPlugin extends Plugin {
 			() => this.settings,
 		);
 		this.taskRepository = new TaskRepository(this.app, () => this.settings);
+		this.themeRepository = new ThemeRepository(this.app, () => this.settings);
 
 		this.registerView(
 			HAIDENCYRIL_VIEW_TYPE,
@@ -163,6 +171,25 @@ export default class HaidencyrilPlugin extends Plugin {
 					void this.repository.reopenProject(file).then(() =>
 						this.refreshWorkspace(),
 					);
+				}
+				return isCompletedProject;
+			},
+		});
+		this.addCommand({
+			id: 'evolve-theme-from-project',
+			name: '将当前已完成项目沉淀为长期主题',
+			checkCallback: (checking) => {
+				const file = this.app.workspace.getActiveFile();
+				const isCompletedProject =
+					file instanceof TFile &&
+					this.app.metadataCache.getFileCache(file)?.frontmatter?.[
+						'haidencyril_type'
+					] === 'project' &&
+					this.app.metadataCache.getFileCache(file)?.frontmatter?.[
+						'haidencyril_status'
+					] === 'completed';
+				if (isCompletedProject && !checking) {
+					void this.openThemeEvolutionModal(file);
 				}
 				return isCompletedProject;
 			},
@@ -294,6 +321,29 @@ export default class HaidencyrilPlugin extends Plugin {
 				await this.refreshWorkspace();
 			},
 		).open();
+	}
+
+	async openThemeEvolutionModal(projectFile: TFile): Promise<void> {
+		new ThemeEvolutionModal(
+			this.app,
+			projectFile.basename,
+			await this.themeRepository.getThemes(),
+			(draft) => this.saveThemeEvolution(projectFile, draft),
+		).open();
+	}
+
+	async getThemes(): Promise<ThemeSummary[]> {
+		return this.themeRepository.getThemes();
+	}
+
+	private async saveThemeEvolution(
+		projectFile: TFile,
+		draft: ThemeEvolutionDraft,
+	): Promise<void> {
+		const themeFile = await this.themeRepository.saveEvolution(projectFile, draft);
+		await this.refreshWorkspace();
+		new Notice('长期主题时间线已更新');
+		await this.app.workspace.getLeaf(true).openFile(themeFile);
 	}
 
 	openSemanticSearchModal(): void {
@@ -458,6 +508,7 @@ export default class HaidencyrilPlugin extends Plugin {
 			'schedule_draft',
 			'reminder_draft',
 			'temporary_block',
+			'theme',
 		].includes(type as string);
 	}
 

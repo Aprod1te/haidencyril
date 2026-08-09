@@ -12,6 +12,7 @@ import type {
 } from '../data/fragment-repository';
 import type { CalendarBlock } from '../domain/schedule';
 import type { VaultTask } from '../data/task-repository';
+import type { ThemeSummary } from '../data/theme-repository';
 
 export const HAIDENCYRIL_VIEW_TYPE = 'haidencyril-workspace';
 
@@ -107,11 +108,12 @@ export class HaidencyrilWorkspaceView extends ItemView {
 		captureButton.addEventListener('click', () => this.plugin.openCaptureModal());
 
 		const files = this.plugin.repository.getInboxFiles();
-		const [analysisHistory, projects, agendaBlocks, tasks] = await Promise.all([
+		const [analysisHistory, projects, agendaBlocks, tasks, themes] = await Promise.all([
 			this.plugin.repository.getAnalysisHistory(),
 			this.plugin.repository.getProjects(),
 			this.plugin.getAgendaBlocks(),
 			this.plugin.getTasks(),
+			this.plugin.getThemes(),
 		]);
 		const entries = await Promise.all(
 			files.map(async (file): Promise<FragmentEntry> => {
@@ -171,6 +173,9 @@ export class HaidencyrilWorkspaceView extends ItemView {
 		}
 		if (completedProjects.length > 0) {
 			this.renderCompletedProjects(root, completedProjects.slice(0, 4));
+		}
+		if (themes.length > 0) {
+			this.renderThemes(root, themes);
 		}
 
 		const sectionHeader = root.createDiv({ cls: 'haidencyril-section-header' });
@@ -479,6 +484,40 @@ export class HaidencyrilWorkspaceView extends ItemView {
 			card.createEl('p', {
 				text: project.outcome || '已完成，打开项目查看复盘。',
 			});
+			const actions = card.createDiv({ cls: 'haidencyril-completed-actions' });
+			const evolve = actions.createEl('button', {
+				text: '沉淀长期主题',
+				cls: 'haidencyril-card-button haidencyril-card-button-primary',
+			});
+			evolve.addEventListener('click', () =>
+				void this.plugin.openThemeEvolutionModal(project.file),
+			);
+		}
+	}
+
+	private renderThemes(container: HTMLElement, themes: ThemeSummary[]): void {
+		const header = container.createDiv({
+			cls: 'haidencyril-section-header haidencyril-themes-header',
+		});
+		header.createEl('h2', { text: '长期主题' });
+		header.createSpan({
+			text: `${themes.length} 个主题 · ${themes.reduce((total, theme) => total + theme.occurrenceCount, 0)} 次观察`,
+		});
+		const list = container.createDiv({ cls: 'haidencyril-theme-list' });
+		for (const theme of themes) {
+			const card = list.createDiv({ cls: 'haidencyril-theme-card' });
+			const top = card.createDiv({ cls: 'haidencyril-theme-card-top' });
+			const title = top.createEl('button', {
+				text: theme.title,
+				cls: 'haidencyril-project-title',
+			});
+			title.addEventListener('click', () => void this.openFile(theme.file));
+			top.createSpan({
+				text: `${theme.occurrenceCount} 次`,
+				cls: 'haidencyril-status haidencyril-status-analyzed',
+			});
+			card.createEl('p', { text: theme.statement });
+			card.createEl('small', { text: `最近观察：${theme.latestObservation}` });
 		}
 	}
 
