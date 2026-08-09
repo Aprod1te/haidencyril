@@ -203,6 +203,11 @@ export default class HaidencyrilPlugin extends Plugin {
 			(params) => void this.handleCalendarSync(params),
 		);
 		this.addSettingTab(new HaidencyrilSettingTab(this.app, this));
+		this.app.workspace.onLayoutReady(() => {
+			if (Platform.isMobileApp && !this.app.workspace.getActiveFile()) {
+				void this.activateWorkspace();
+			}
+		});
 
 		this.registerEvent(
 			this.app.vault.on('create', () => {
