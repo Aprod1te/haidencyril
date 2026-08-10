@@ -27,6 +27,8 @@ export class CaptureModal extends Modal {
 
 	onOpen(): void {
 		const { contentEl } = this;
+		this.containerEl.addClass('haidencyril-capture-container');
+		this.modalEl.addClass('haidencyril-capture-shell');
 		contentEl.addClass('haidencyril-capture-modal');
 		contentEl.createEl('h2', { text: '记录一个碎片' });
 		contentEl.createEl('p', {
@@ -88,6 +90,8 @@ export class CaptureModal extends Modal {
 	}
 
 	onClose(): void {
+		this.containerEl.removeClass('haidencyril-capture-container');
+		this.modalEl.removeClass('haidencyril-capture-shell');
 		this.contentEl.empty();
 	}
 
