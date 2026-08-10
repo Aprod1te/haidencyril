@@ -30,7 +30,7 @@ export const DEFAULT_SETTINGS: HaidencyrilSettings = {
 	scheduleFolder: 'Haidencyril/Schedule',
 	aiEnabled: true,
 	model: 'qwen3.5:9b',
-	taskPlanningModel: 'qwen3.5:4b',
+	taskPlanningModel: 'qwen3.5:9b',
 	embeddingModel: 'qwen3-embedding:0.6b',
 	calendarShortcutName: 'Haidencyril 日程',
 	reminderShortcutName: 'Haidencyril 提醒',
@@ -94,7 +94,7 @@ export class HaidencyrilSettingTab extends PluginSettingTab {
 
 		new Setting(containerEl)
 			.setName('任务拆解模型')
-			.setDesc('用于快速生成执行清单；当前设备推荐 qwen3.5:4b。')
+			.setDesc('用于生成遵守完成项、阶段和依赖约束的执行清单；当前设备推荐 qwen3.5:9b。')
 			.addText((text) =>
 				text
 					.setPlaceholder(DEFAULT_SETTINGS.taskPlanningModel)
