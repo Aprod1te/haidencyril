@@ -1,0 +1,9 @@
+{
+	"id": "haidencyril",
+	"name": "Haidencyril",
+	"version": "0.1.0",
+	"minAppVersion": "1.11.5",
+	"description": "Turn scattered notes into traceable understanding, projects, and action.",
+	"author": "Haidencyril",
+	"isDesktopOnly": false
+}
